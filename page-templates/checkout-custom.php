@@ -1,0 +1,374 @@
+<?php
+/*
+Template Name: Checkout (Custom)
+Description: Blank canvas for a custom checkout built in Divi Child. Does not use Woo default checkout.
+*/
+if ( ! defined( 'ABSPATH' ) ) { exit; }
+// Handle coupon application and order placement BEFORE any output
+if ( function_exists( 'WC' ) ) {
+  // Apply coupon
+  if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['cc_apply_coupon'] ) ) {
+    $coupon = isset( $_POST['cc_coupon_code'] ) ? sanitize_text_field( wp_unslash( $_POST['cc_coupon_code'] ) ) : '';
+    if ( $coupon !== '' ) {
+      WC()->cart->apply_coupon( $coupon );
+      WC()->cart->calculate_totals();
+    }
+  }
+  // Place order
+  if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['cc_place_order'] ) ) {
+    $nonce = isset($_POST['cc_checkout_nonce']) ? sanitize_text_field( wp_unslash($_POST['cc_checkout_nonce']) ) : '';
+    if ( ! wp_verify_nonce( $nonce, 'cc_checkout' ) ) {
+      wc_add_notice( __( 'Bezbednosna greška. Molimo pokušajte ponovo.', 'divi-child' ), 'error' );
+    } else {
+      // Server-side validation of required fields
+      $errors = array();
+      $ctype = isset($_POST['customer_type']) ? sanitize_text_field( wp_unslash($_POST['customer_type']) ) : 'individual';
+      $req = array(
+        'billing_first_name' => 'Ime',
+        'billing_last_name'  => 'Prezime',
+        'billing_address_1'  => 'Ulica',
+        'billing_city'       => 'Grad',
+        'billing_postcode'   => 'Poštanski broj',
+        'billing_phone'      => 'Telefon',
+        'billing_email'      => 'E‑mail'
+      );
+      // Additional address number
+      if ( empty( $_POST['address_number'] ) ) { $errors[] = 'Unesite broj ulice.'; }
+      foreach( $req as $key => $label ){
+        if ( empty( $_POST[$key] ) ) { $errors[] = sprintf( 'Polje %s je obavezno.', $label ); }
+      }
+      if ( ! empty( $_POST['billing_email'] ) && ! is_email( wp_unslash( $_POST['billing_email'] ) ) ) {
+        $errors[] = 'Unesite ispravan e‑mail.';
+      }
+      // Serbian postcode: exactly 5 digits
+      if ( ! empty( $_POST['billing_postcode'] ) ) {
+        $pc = trim( wp_unslash( $_POST['billing_postcode'] ) );
+        if ( ! preg_match( '/^\d{5}$/', $pc ) ) {
+          $errors[] = 'Poštanski broj mora imati 5 cifara.';
+        }
+      }
+      // Phone: accept formats starting with +381 or 0, with digits and optional separators
+      if ( ! empty( $_POST['billing_phone'] ) ) {
+        $ph = trim( wp_unslash( $_POST['billing_phone'] ) );
+        if ( ! preg_match( '/^(\+381|0)[0-9\s\-()]{6,}$/', $ph ) ) {
+          $errors[] = 'Unesite ispravan telefon.';
+        }
+      }
+      if ( $ctype === 'company' ){
+        $creq = array(
+          'billing_company' => 'Pravno lice',
+          'billing_mb'      => 'Matični broj',
+          'billing_pib'     => 'PIB',
+        );
+        foreach( $creq as $key => $label ){
+          if ( empty( $_POST[$key] ) ) { $errors[] = sprintf( 'Polje %s je obavezno.', $label ); }
+        }
+        // At least one participant with name and email
+        if ( empty( $_POST['participants'] ) || ! is_array( $_POST['participants'] ) ) {
+          $errors[] = 'Dodajte bar jednog polaznika.';
+        } else {
+          $valid_any = false;
+          foreach( $_POST['participants'] as $p ){
+            $fn = isset($p['full_name']) ? trim( wp_unslash( $p['full_name'] ) ) : '';
+            $em = isset($p['email']) ? trim( wp_unslash( $p['email'] ) ) : '';
+            if ( $fn && is_email( $em ) ) { $valid_any = true; break; }
+          }
+          if ( ! $valid_any ) { $errors[] = 'Polaznik mora imati ime i ispravan e‑mail.'; }
+        }
+      }
+      if ( ! empty( $errors ) ){
+        foreach( $errors as $msg ){ wc_add_notice( $msg, 'error' ); }
+        // Skip order creation; let template render and show notices
+        return;
+      }
+
+      $checkout = WC()->checkout();
+      $keys = array(
+        'billing_first_name','billing_last_name','billing_address_1','billing_address_2',
+        'billing_city','billing_postcode','billing_phone','billing_email','billing_country',
+        'order_comments','billing_company','billing_mb','billing_pib','customer_type','payment_method'
+      );
+      $data = array();
+      foreach ( $keys as $k ) {
+        if ( isset( $_POST[$k] ) ) {
+          $v = wp_unslash( $_POST[$k] );
+          $data[$k] = is_array($v) ? wc_clean($v) : sanitize_text_field( $v );
+        }
+      }
+
+      try {
+        $order_id = $checkout->create_order( $data );
+        if ( is_wp_error( $order_id ) ) {
+          throw new Exception( $order_id->get_error_message() );
+        }
+        $order = wc_get_order( $order_id );
+
+        // Save participants if sent
+        if ( isset($_POST['participants']) && is_array($_POST['participants']) ) {
+          $participants = array();
+          foreach ( $_POST['participants'] as $p ) {
+            $participants[] = array(
+              'full_name' => isset($p['full_name']) ? sanitize_text_field( wp_unslash($p['full_name']) ) : '',
+              'email'     => isset($p['email']) ? sanitize_email( wp_unslash($p['email']) ) : '',
+              'phone'     => isset($p['phone']) ? sanitize_text_field( wp_unslash($p['phone']) ) : '',
+            );
+          }
+          $order->update_meta_data( 'participants', wp_json_encode( $participants ) );
+        }
+
+        // Ensure the order has the selected payment method set
+        $payment_method = isset( $data['payment_method'] ) ? $data['payment_method'] : '';
+        $available = WC()->payment_gateways()->get_available_payment_gateways();
+        if ( $payment_method && isset( $available[ $payment_method ] ) ) {
+          $order->set_payment_method( $available[ $payment_method ] );
+        }
+        $order->save();
+
+        // Process payment and redirect
+        if ( $payment_method && isset( $available[ $payment_method ] ) ) {
+          $result = $available[ $payment_method ]->process_payment( $order_id );
+          if ( isset($result['result']) && 'success' === $result['result'] && ! empty( $result['redirect'] ) ) {
+            wp_safe_redirect( $result['redirect'] );
+            exit;
+          }
+        }
+        // Fallback
+        wp_safe_redirect( $order->get_checkout_order_received_url() );
+        exit;
+      } catch ( Exception $e ) {
+        wc_add_notice( $e->getMessage(), 'error' );
+      }
+    }
+  }
+}
+
+get_header();
+?>
+
+<main id="primary" class="site-main custom-checkout">
+  <div class="container custom-checkout__container">
+    <?php 
+    // Render page content (Divi builder, etc.) but suppress the WooCommerce checkout shortcode
+    global $shortcode_tags;
+    $wc_checkout_cb = isset($shortcode_tags['woocommerce_checkout']) ? $shortcode_tags['woocommerce_checkout'] : null;
+    if ($wc_checkout_cb) { remove_shortcode('woocommerce_checkout'); }
+    if ( have_posts() ) : while ( have_posts() ) : the_post(); ?>
+      <div class="custom-checkout__content">
+        <?php the_content(); ?>
+      </div>
+    <?php endwhile; endif; 
+    if ($wc_checkout_cb) { add_shortcode('woocommerce_checkout', $wc_checkout_cb); }
+    ?>
+
+    <div class="cc-layout">
+      <div class="cc-left">
+        <form class="cc-form" id="cc-form" method="post" novalidate>
+          <input type="hidden" id="cc_payment_method" name="payment_method" value="" />
+          <input type="hidden" name="cc_place_order" value="1" />
+          <?php wp_nonce_field( 'cc_checkout', 'cc_checkout_nonce' ); ?>
+          <div class="cc-section">
+            <h2 class="cc-section__title">Način dostave</h2>
+            <div class="cc-card">
+              <div class="cc-row">
+                <div class="cc-field cc-field-select">
+                  <label for="cc_country">Država</label>
+                  <select id="cc_country" name="country_display" disabled>
+                    <option value="RS" selected>Srbija</option>
+                  </select>
+                  <input type="hidden" name="billing_country" value="RS" />
+                </div>
+              </div>
+
+              <div class="cc-row">
+                <div class="cc-field cc-half">
+                  <label for="cc_first_name">Ime</label>
+                  <input type="text" id="cc_first_name" name="billing_first_name" placeholder="Ime" />
+                </div>
+                <div class="cc-field cc-half">
+                  <label for="cc_last_name">Prezime</label>
+                  <input type="text" id="cc_last_name" name="billing_last_name" placeholder="Prezime" />
+                </div>
+              </div>
+
+              <div class="cc-row">
+                <div class="cc-field cc-segment">
+                  <input type="radio" id="cc_type_individual" name="customer_type" value="individual" checked />
+                  <label for="cc_type_individual">Fizičko lice</label>
+                  <input type="radio" id="cc_type_company" name="customer_type" value="company" />
+                  <label for="cc_type_company">Pravno lice</label>
+                </div>
+              </div>
+
+              <div class="cc-row cc-company cc-hidden" id="cc-company-block">
+                <div class="cc-field cc-row-wide">
+                  <label for="cc_company_name">Pravno lice</label>
+                  <input type="text" id="cc_company_name" name="billing_company" />
+                </div>
+                <div class="cc-field cc-half">
+                  <label for="cc_company_mb">Matični broj</label>
+                  <input type="text" id="cc_company_mb" name="billing_mb" />
+                </div>
+                <div class="cc-field cc-half">
+                  <label for="cc_company_pib">PIB</label>
+                  <input type="text" id="cc_company_pib" name="billing_pib" />
+                </div>
+              </div>
+
+              <div class="cc-row cc-address">
+                <div class="cc-field cc-street">
+                  <label for="cc_street">Ulica</label>
+                  <input type="text" id="cc_street" name="billing_address_1" />
+                </div>
+                <div class="cc-field cc-third">
+                  <label for="cc_entrance">Broj</label>
+                  <input type="text" id="cc_entrance" name="address_number" />
+                </div>
+                <div class="cc-field cc-third">
+                  <label for="cc_apartment">Stan</label>
+                  <input type="text" id="cc_apartment" name="apartment" />
+                </div>
+                <input type="hidden" id="cc_billing_address_2" name="billing_address_2" />
+              </div>
+
+              <div class="cc-row">
+                <div class="cc-field cc-half">
+                  <label for="cc_city">Grad</label>
+                  <input type="text" id="cc_city" name="billing_city" />
+                </div>
+                <div class="cc-field cc-half">
+                  <label for="cc_postcode">Poštanski broj</label>
+                  <input type="text" id="cc_postcode" name="billing_postcode" />
+                </div>
+              </div>
+
+              <div class="cc-row">
+                <div class="cc-field cc-half">
+                  <label for="cc_phone">Broj mobilnog telefona</label>
+                  <input type="text" id="cc_phone" name="billing_phone" placeholder="+381" />
+                </div>
+                <div class="cc-field cc-half">
+                  <label for="cc_email">E-mail</label>
+                  <input type="email" id="cc_email" name="billing_email" />
+                </div>
+              </div>
+
+              <div class="cc-row cc-row-wide">
+                <div class="cc-field cc-row-wide">
+                  <label for="cc_notes">Dodatne napomene kuriru (ili kurirskoj službi) u vezi sa isporukom</label>
+                  <textarea id="cc_notes" name="order_comments" placeholder="Ukoliko imate dodatne napomene radi lakše isporuke molimo Vas da ih ovde unesete"></textarea>
+                </div>
+              </div>
+
+              
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <aside class="cc-summary">
+        <div class="cc-summary__card">
+          <h3>Pregled narudžbine</h3>
+          <div class="cc-summary__content">
+            <div class="cc-summary__row">
+              <span>Narudžbina</span>
+              <span><?php echo function_exists( 'WC' ) ? wp_kses_post( WC()->cart->get_cart_subtotal() ) : '—'; ?></span>
+            </div>
+            <div class="cc-summary__total">
+              <span>Ukupno za plaćanje</span>
+              <span><?php echo function_exists( 'WC' ) ? wp_kses_post( WC()->cart->get_total() ) : '—'; ?></span>
+            </div>
+
+            <form method="post" class="cc-coupon-form">
+              <label for="cc_coupon_code">Kupon</label>
+              <div class="cc-coupon-row">
+                <input type="text" name="cc_coupon_code" id="cc_coupon_code" placeholder="Unesite kupon" />
+                <button type="submit" name="cc_apply_coupon" value="1" class="cc-btn cc-btn-primary">Primeni</button>
+              </div>
+            </form>
+            <?php if ( function_exists( 'wc_print_notices' ) ) { wc_print_notices(); } ?>
+          </div>
+        </div>
+
+        <div class="cc-summary__card cc-participants cc-hidden" id="cc-participants">
+          <h3>Dodaj polaznika</h3>
+          <div id="cc-participants-list"></div>
+          <div class="cc-actions">
+            <button type="button" class="cc-btn cc-btn-primary" id="cc-add-participant">Dodaj polaznika</button>
+          </div>
+        </div>
+
+        <div class="cc-summary__card cc-payments" id="cc-payments">
+          <h3>Način plaćanja</h3>
+          <div class="cc-payments__list">
+            <?php
+            $gateways = [];
+            if ( function_exists( 'WC' ) ) {
+              $pg = WC()->payment_gateways();
+              if ( $pg ) {
+                $gateways = $pg->get_available_payment_gateways();
+              }
+            }
+            if ( ! empty( $gateways ) ) :
+            ?>
+              <ul class="cc-payments__ul">
+                <?php $first = true; foreach ( $gateways as $gateway_id => $gateway ) : ?>
+                  <li class="cc-pay-option" data-gateway="<?php echo esc_attr( $gateway_id ); ?>">
+                    <input type="radio" id="cc_pm_<?php echo esc_attr( $gateway_id ); ?>" name="cc_payment_method" value="<?php echo esc_attr( $gateway_id ); ?>" <?php checked( $first ); $first = false; ?> />
+                    <label for="cc_pm_<?php echo esc_attr( $gateway_id ); ?>">
+                      <span class="cc-pay-option__title"><?php echo esc_html( $gateway->get_title() ); ?></span>
+                      <?php $desc = $gateway->get_description(); if ( $desc ) : ?>
+                        <span class="cc-pay-option__desc"><?php echo wp_kses_post( $desc ); ?></span>
+                      <?php endif; ?>
+                    </label>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            <?php else : ?>
+              <p>Nema dostupnih metoda plaćanja.</p>
+            <?php endif; ?>
+          </div>
+          <div class="cc-actions cc-order-actions">
+            <button type="submit" class="cc-btn cc-btn-primary" id="cc-place-order" form="cc-form">Naruči</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Mount point (optional, for future dynamic UI) -->
+    <div id="custom-checkout-app" class="custom-checkout__app" hidden></div>
+  </div>
+
+  <?php
+  // Custom footer (only for this checkout template)
+  $terms_url   = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('terms') : '';
+  $privacy_url = function_exists('get_privacy_policy_url') ? get_privacy_policy_url() : '';
+  ?>
+
+  <div class="container custom-checkout__container cc-legal">
+    <div class="cc-card cc-legal__card">
+      <div class="cc-legal__header">
+        <h3>Kontakt podaci</h3>
+        <div class="cc-legal__links">
+          <?php if ( $terms_url ) : ?>
+            <a href="<?php echo esc_url( $terms_url ); ?>">Opšta pravila pružanja usluga</a>
+          <?php endif; ?>
+          <?php if ( $privacy_url ) : ?>
+            <a href="<?php echo esc_url( $privacy_url ); ?>">Politika privatnosti i politika kolačića</a>
+          <?php endif; ?>
+        </div>
+      </div>
+      <ul class="cc-legal__list">
+        <li><strong>Softuni doo Beograd</strong></li>
+        <li>Adresa: Pivljanina Baja 1, 11000 Beograd,(Savski venac), Srbija</li>
+        <li>Telefon: +381602823118</li>
+        <li>E-mail: <a href="mailto:office@softuni.rs">office@softuni.rs</a>, <a href="mailto:studentskasluzba@softuni.rs">studentskasluzba@softuni.rs</a></li>
+        <li>delatnost i šifra delatnosti: 8559 – Ostalo obrazovanje</li>
+        <li>matični broj: 21848891</li>
+        <li>poreski broj: 113341376</li>
+        <li>web adresa: <a href="https://www.softuni.rs" target="_blank" rel="noopener">www.softuni.rs</a></li>
+      </ul>
+    </div>
+  </div>
+</main>
+
+<?php get_footer(); ?>
