@@ -51,6 +51,17 @@ add_action('woocommerce_admin_order_data_after_billing_address', function( $orde
 		echo '</ol>';
 		echo '</div>';
 	}
+	$invoice_number = $order->get_meta('su_invoice_number');
+	if ( $invoice_number ) {
+		echo '<p><strong>Broj fakture:</strong> ' . esc_html( $invoice_number ) . '</p>';
+	}
+	// Link to saved PDF, if any
+	$pdf_url = $order->get_meta('su_pdf_url');
+	$pdf_title = $order->get_meta('su_pdf_title');
+	if ( $pdf_url ) {
+		echo '<p style="margin-top:8px"><strong>'. esc_html( $pdf_title ? $pdf_title : 'Dokument (PDF)' ) .':</strong> ';
+		echo '<a href="'. esc_url( $pdf_url ) .'" target="_blank" rel="noopener">Preuzmi</a></p>';
+	}
 	echo '</div>';
 });
 

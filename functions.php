@@ -51,4 +51,12 @@ if ( class_exists('WooCommerce') ) {
 	require_once DIVICHILD_PATH . '/inc/woocommerce/routing.php';
 	// Email customizations (participants block, company meta in emails)
 	require_once DIVICHILD_PATH . '/inc/woo/emails.php';
+	// PDF invoice/proforma generator (thank-you page button)
+	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-pdf.php';
+	// Admin-side PDF generator button/meta box on order edit
+	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-admin.php';
+	// AJAX handler to save generated PDF into /Fakture and attach to order
+	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-save.php';
+	// Sequential invoice numbering + admin listing
+	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-number.php';
 }

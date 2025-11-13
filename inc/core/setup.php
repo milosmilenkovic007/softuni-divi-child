@@ -1,5 +1,10 @@
 <?php
 if (!defined('ABSPATH')) { exit; }
+// Ensure Fakture directory exists early (for PDF storage)
+add_action('after_setup_theme', function(){
+	$folder = trailingslashit( get_stylesheet_directory() ) . 'Fakture';
+	if ( ! is_dir( $folder ) ) { wp_mkdir_p( $folder ); }
+});
 
 add_action('after_setup_theme', function () {
 	load_child_theme_textdomain('divi-child', get_stylesheet_directory() . '/languages');
