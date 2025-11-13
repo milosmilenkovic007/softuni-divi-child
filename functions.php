@@ -49,4 +49,6 @@ require_once DIVICHILD_PATH . '/inc/shortcodes/acf-field.php';
 if ( class_exists('WooCommerce') ) {
 	require_once DIVICHILD_PATH . '/inc/woocommerce/order-meta.php';
 	require_once DIVICHILD_PATH . '/inc/woocommerce/routing.php';
+	// Email customizations (participants block, company meta in emails)
+	require_once DIVICHILD_PATH . '/inc/woo/emails.php';
 }

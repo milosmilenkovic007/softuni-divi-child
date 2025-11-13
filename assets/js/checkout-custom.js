@@ -43,7 +43,15 @@
 
       // Reorder so that card gateway is on top and bacs at bottom
       var $ul = $('.cc-payments__ul');
-      var $card = $options.filter('[data-gateway="nestpay"], [data-gateway="stripe"], [data-gateway="woocommerce_payments"], [data-gateway="wcpay"]');
+      // Expanded list of common credit-card gateway IDs
+      var cardIds = [
+        'nestpay','stripe','woocommerce_payments','wcpay',
+        'mollie_wc_gateway_creditcard','braintree_cc','payu','payu_card',
+        'vivawallet','mypos','mypos_virtual','authorize_net_cim_credit_card',
+        'square_credit_card','paytabs_cc'
+      ];
+      var cardSel = cardIds.map(function(id){ return '[data-gateway="'+id+'"]'; }).join(', ');
+      var $card = cardSel ? $options.filter(cardSel) : $();
       var $bacs = $options.filter('[data-gateway="bacs"]');
       var $others = $options.not($card).not($bacs);
       if($ul.length){
@@ -54,7 +62,11 @@
       }
 
       // Prefer a card gateway as default (even if something else was selected before)
-      if(!selectGatewayById('nestpay') && !selectGatewayById('stripe') && !selectGatewayById('woocommerce_payments') && !selectGatewayById('wcpay')){
+      var picked = false;
+      for(var i=0;i<cardIds.length;i++){
+        if(selectGatewayById(cardIds[i])){ picked = true; break; }
+      }
+      if(!picked){
         var $first = $('.cc-pay-option:not(.cc-hidden)').first().find('input');
         if($first.length){ $first.prop('checked', true).trigger('change'); }
       }
