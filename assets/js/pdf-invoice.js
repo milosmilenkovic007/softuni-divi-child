@@ -72,13 +72,11 @@
   function buildPdf(data, invoiceNumber){
     if(!window.jspdf || !window.jspdf.jsPDF){ alert('PDF engine nije dostupan.'); return; }
     var jsPDF = window.jspdf.jsPDF;
-    var doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    var doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
-    var margin = 54; // 3/4 inch
-    var pageWidth = doc.internal.pageSize.getWidth();
-    var xLeft = margin;
-    var xRight = pageWidth - margin;
-    var y = margin;
+    var margin = 15;
+    var pageWidth = 210; // A4 width in mm
+    var pageHeight = 297; // A4 height in mm
 
     // Convert date strings to localized forms
     if(data && data.meta){
@@ -86,121 +84,176 @@
       data.meta.order_date   = localizeDate(data.meta.order_date);
     }
 
+    // Logo at top left (if available via context)
+    var ctx = window.SU_PDF_CTX || {};
+    if(ctx.SU_LOGO_PATH){
+      try {
+        doc.addImage(ctx.SU_LOGO_PATH, 'PNG', margin, margin, 40, 0);
+      } catch(e) {
+        console.warn('Logo failed to load:', e);
+      }
+    }
+
+    // Seller info top-right
     doc.setFont('helvetica','normal');
-    doc.setFontSize(10);
-    
-    // Seller details top-right - simple bullet list
+    doc.setFontSize(8);
     var sellerLines = [
       data.seller.name,
       data.seller.address,
       '11000 Beograd',
       'Srbija',
-      '• delatnost i sifra delatnosti: 8559 - Ostalo obrazovanje',
-      '• maticni broj: 21848891',
-      '• poreski broj: 113341376'
+      'delatnost i sifra delatnosti: 8559 - Ostalo obrazovanje',
+      'maticni broj: 21848891',
+      'poreski broj: 113341376'
     ];
+    var sellerY = margin;
     sellerLines.forEach(function(line){ 
-      textRight(doc, line, xRight, y); 
-      y += 12; 
+      var textWidth = doc.getTextWidth(line);
+      doc.text(line, pageWidth - margin - textWidth, sellerY); 
+      sellerY += 4.5; 
     });
 
-    y += 18;
-    // Title
+    // Document title (centered, bold)
+    var titleY = 60;
     doc.setFont('helvetica','bold');
-    doc.setFontSize(16);
-    doc.text((data.docTitle || 'FAKTURA').toUpperCase(), xLeft, y);
+    doc.setFontSize(18);
+    var title = (data.docTitle || 'FAKTURA').toUpperCase();
+    var titleWidth = doc.getTextWidth(title);
+    doc.text(title, (pageWidth - titleWidth) / 2, titleY);
 
-    y += 24;
+    // Buyer section (left)
+    var buyerY = 80;
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9);
+    doc.text('Kupac:', margin, buyerY);
+    
+    buyerY += 5;
     doc.setFont('helvetica','normal');
-    doc.setFontSize(10);
-
-    // Left: buyer lines; Right: meta
-    var leftY = y;
     (data.buyer && data.buyer.lines || []).forEach(function(line){
-      doc.text(String(line), xLeft, leftY);
-      leftY += 12;
+      doc.text(String(line), margin, buyerY);
+      buyerY += 5;
     });
 
-    var rightY = y;
+    // Invoice details table (right)
+    var detailsStartY = 80;
     var meta = data.meta || {};
-    var metaLines = [
-      ['Broj fakture:', meta.invoice_no],
-      ['Datum fakture:', meta.invoice_date],
-      ['Broj porudzbine:', meta.order_no],
-      ['Datum porudzbine:', meta.order_date],
-      ['Nacin placanja:', meta.payment_method]
-    ];
-    metaLines.forEach(function(pair){
-      if(!pair[1]) return;
-      doc.text(pair[0], xRight-180, rightY);
-      textRight(doc, String(pair[1]), xRight, rightY);
-      rightY += 13;
-    });
-
-    y = Math.max(leftY, rightY) + 20;
+    if(invoiceNumber){ meta.invoice_no = invoiceNumber; }
+    
+    if(doc.autoTable){
+      doc.autoTable({
+        startY: detailsStartY,
+        body: [
+          ['Broj fakture:', meta.invoice_no || ''],
+          ['Datum fakture:', meta.invoice_date || ''],
+          ['Broj porudzbine:', meta.order_no || ''],
+          ['Datum porudzbine:', meta.order_date || ''],
+          ['Nacin placanja:', meta.payment_method || '']
+        ],
+        theme: 'grid',
+        styles: { 
+          font: 'helvetica', 
+          fontSize: 9, 
+          cellPadding: 3,
+          lineColor: [51, 51, 51],
+          lineWidth: 0.1
+        },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 50, lineColor: [204, 204, 204] },
+          1: { cellWidth: 40 }
+        },
+        margin: { left: 105 },
+        tableWidth: 90,
+        didParseCell: function(data) {
+          // Alternating row colors
+          if(data.section === 'body' && data.row.index % 2 === 1){
+            data.cell.styles.fillColor = [249, 249, 249];
+          }
+        }
+      });
+    }
 
     // Items table
+    var itemsStartY = 145;
+    
+    // Clean prices from HTML entities
     var body = (data.items||[]).map(function(it){
       var name = it.name || '';
       if(it.sku){ name += "\nSifra proizvoda: " + it.sku; }
-      return [ name, it.qty || 1, it.total || '' ];
+      // Strip HTML entities like &nbsp; from price
+      var cleanPrice = (it.total || '').replace(/&nbsp;/g, ' ').replace(/&[a-z]+;/gi, '');
+      return [ name, it.qty || 1, cleanPrice ];
     });
 
     if(doc.autoTable){
       doc.autoTable({
-        startY: y,
+        startY: itemsStartY,
         head: [['Proizvod','Kolicina','Cena']],
         body: body,
-        styles: { font: 'helvetica', fontSize: 9, cellPadding: 5, overflow: 'linebreak', lineColor: [0,0,0], lineWidth: 0.5 },
-        headStyles: { fillColor: [0,0,0], textColor: 255, fontStyle: 'bold', fontSize: 10 },
-        columnStyles: { 
-          0: { cellWidth: 'auto' },
-          1: { halign: 'center', cellWidth: 60 }, 
-          2: { halign: 'right', cellWidth: 90 } 
-        },
         theme: 'grid',
-        margin: { left: xLeft, right: pageWidth - xRight }
+        styles: { 
+          font: 'helvetica', 
+          fontSize: 9, 
+          cellPadding: 6,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.5
+        },
+        headStyles: { 
+          fillColor: [51, 51, 51], 
+          textColor: 255, 
+          fontStyle: 'bold', 
+          fontSize: 9,
+          halign: 'left'
+        },
+        columnStyles: { 
+          0: { cellWidth: 105, halign: 'left' },
+          1: { cellWidth: 30, halign: 'center' }, 
+          2: { cellWidth: 45, halign: 'right' } 
+        },
+        margin: { left: margin, right: margin },
+        didParseCell: function(data) {
+          // Alternating row colors
+          if(data.section === 'body' && data.row.index % 2 === 1){
+            data.cell.styles.fillColor = [249, 249, 249];
+          }
+        }
       });
-      y = doc.lastAutoTable.finalY + 16;
-    } else {
-      doc.setFont('helvetica','bold'); 
-      doc.text('Proizvod', xLeft, y); 
-      textRight(doc,'Cena', xRight, y); 
-      y+=14; 
-      doc.setFont('helvetica','normal');
-      body.forEach(function(row){ 
-        doc.text(String(row[0]), xLeft, y); 
-        textRight(doc, String(row[2]), xRight, y); 
-        y+=14; 
-      });
-      y += 12;
+      
+      var tableEndY = doc.lastAutoTable.finalY;
+
+      // Total section - only UKUPNO
+      var totalY = tableEndY + 8;
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(13);
+      
+      // Clean total from HTML entities
+      var cleanTotal = (data.total || '').replace(/&nbsp;/g, ' ').replace(/&[a-z]+;/gi, '');
+      
+      var totalText = 'UKUPNO: ' + cleanTotal;
+      var totalWidth = doc.getTextWidth(totalText);
+      var totalX = pageWidth - margin - totalWidth;
+      
+      // Top border line
+      doc.setDrawColor(0);
+      doc.setLineWidth(0.5);
+      doc.line(totalX, totalY - 2, pageWidth - margin, totalY - 2);
+      
+      doc.text(totalText, totalX, totalY + 5);
+
+      // Footer
+      var footerY = totalY + 15;
+      doc.setDrawColor(0);
+      doc.setLineWidth(0.3);
+      doc.line(margin, footerY, pageWidth - margin, footerY);
+      
+      footerY += 5;
+      doc.setFont('helvetica','italic');
+      doc.setFontSize(8);
+      var footerText = 'PDV je ukljucen u cenu.';
+      var footerWidth = doc.getTextWidth(footerText);
+      doc.text(footerText, (pageWidth - footerWidth) / 2, footerY);
     }
 
-    // Totals - right aligned
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(10);
-    var totalLabelX = xRight - 150;
-    doc.text('Svega', totalLabelX, y); 
-    textRight(doc, data.subtotal || '', xRight, y); 
-    y += 14;
-    doc.setFont('helvetica','bold');
-    doc.text('Ukupno', totalLabelX, y); 
-    textRight(doc, data.total || '', xRight, y);
-    y += 30;
-
-    // Footer note
-    doc.setDrawColor(0); 
-    doc.setLineWidth(0.5);
-    doc.line(xLeft, y, xRight, y); 
-    y += 20;
-    doc.setFont('helvetica','normal'); 
-    doc.setFontSize(9);
-    var footerText = 'PDV je ukljucen u cenu.';
-    doc.text(footerText, (pageWidth/2) - (doc.getTextWidth(footerText)/2), y);
-
-  // Replace placeholder invoice_no with real sequential number
-  if(invoiceNumber){ meta.invoice_no = invoiceNumber; }
-  var filename = (data.docTitle || 'faktura') + '_' + (invoiceNumber || meta.order_no || 'order') + '.pdf';
+    var filename = (data.docTitle || 'faktura') + '_' + (invoiceNumber || meta.order_no || 'order') + '.pdf';
 
     // Save client-side and also post to server to persist under /Fakture
     var finalize = function(){
@@ -210,13 +263,13 @@
       sendToServer(finalName, data.docTitle || 'FAKTURA', dataUri)
         .done(function(res){
           if(res && res.success){
-            console.log('PDF sačuvan na serveru:', res.data && res.data.url);
+            console.log('PDF sacuvan na serveru:', res.data && res.data.url);
           } else { console.warn('Server nije vratio success za PDF:', res); }
         })
-        .fail(function(jqXHR){ console.warn('Neuspešno slanje PDF-a na server. Status:', jqXHR.status); });
+        .fail(function(jqXHR){ console.warn('Neuspesno slanje PDF-a na server. Status:', jqXHR.status); });
     };
 
-    ensureFont(doc, finalize);
+    finalize();
   }
 
   function init(){

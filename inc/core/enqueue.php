@@ -102,7 +102,8 @@ add_action('admin_enqueue_scripts', function( $hook ){
 		$inline = [
 			'SU_INVOICE_AJAX_URL' => admin_url('admin-ajax.php'),
 			'SU_THEME_URL'        => $theme_uri,
-			'SU_FONTS_PATH'       => $theme_uri . '/assets/fonts'
+			'SU_FONTS_PATH'       => $theme_uri . '/assets/fonts',
+			'SU_LOGO_PATH'        => $theme_uri . '/assets/img/softunilogo.png'
 		];
 		wp_add_inline_script('divi-child-pdf-invoice', 'window.SU_PDF_CTX = '. wp_json_encode( $inline ) .';', 'before');
 	}

@@ -59,4 +59,8 @@ if ( class_exists('WooCommerce') ) {
 	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-save.php';
 	// Sequential invoice numbering + admin listing
 	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-number.php';
+	// Server-side PDF generator
+	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-server-generator.php';
+	// Auto-generate PDF when order status changes to completed
+	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-auto-generate.php';
 }
