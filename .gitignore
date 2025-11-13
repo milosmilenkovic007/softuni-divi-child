@@ -1,0 +1,48 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Node / front-end caches
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# PHP / Composer
+vendor/
+composer.lock
+composer.phar
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+
+# IDEs and editors
+.vscode/
+.idea/
+*.code-workspace
+
+# Build outputs
+dist/
+build/
+.cache/
+coverage/
+
+# Sass and maps
+.sass-cache/
+*.map
+
+# Environment files
+.env
+.env.*
+
+# Design source files
+*.psd
+*.ai
+*.sketch
