@@ -2,4 +2,6 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/softuni1/staging.softuni.rs/wp-content/themes/divi-child/
-    - /bin/rsync -av --delete ./ $DEPLOYPATH
+    - /bin/rm -rf $DEPLOYPATH
+    - /bin/mkdir -p $DEPLOYPATH
+    - /bin/cp -R ./* $DEPLOYPATH
