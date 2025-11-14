@@ -392,10 +392,17 @@ get_header();
 					// Directly call NestPay receipt page to generate payment form
 					$chosen_payment_method = $order->get_payment_method();
 					
+					error_log('Order-Pay Custom Template: Order ID = ' . $order->get_id());
+					error_log('Order-Pay Custom Template: Payment Method = ' . $chosen_payment_method);
+					error_log('Order-Pay Custom Template: Order needs payment = ' . ($order->needs_payment() ? 'YES' : 'NO'));
+					
 					if ( $chosen_payment_method ) {
+						error_log('Order-Pay Custom Template: Calling woocommerce_receipt_' . $chosen_payment_method);
 						// This will render the NestPay payment form with proper hash
 						do_action( 'woocommerce_receipt_' . $chosen_payment_method, $order->get_id() );
+						error_log('Order-Pay Custom Template: Receipt action called');
 					} else {
+						error_log('Order-Pay Custom Template: ERROR - No payment method found');
 						?>
 						<p style="color: #dc3545; font-weight: 600;">
 							<?php esc_html_e( 'Način plaćanja nije dostupan. Molimo kontaktirajte podršku.', 'divi-child' ); ?>
