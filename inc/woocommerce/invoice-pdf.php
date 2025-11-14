@@ -32,14 +32,41 @@ add_action('woocommerce_thankyou', function( $order_id ){
 		'email' => trim($order->get_billing_email()),
 		'phone' => trim($order->get_billing_phone()),
 	];
-	$buyer_lines = array_filter([
-		$buyer['name'],
-		$buyer['addr1'],
-		$buyer['addr2'],
-		$buyer['city'],
-		$buyer['email'],
-		$buyer['phone'],
-	]);
+	
+	// For company (PROFAKTURA), add company details
+	if ( $is_company ) {
+		$company_name = trim($order->get_meta('billing_company'));
+		$company_mb = trim($order->get_meta('billing_mb'));
+		$company_pib = trim($order->get_meta('billing_pib'));
+		
+		// For PROFAKTURA, show company details with labels
+		$buyer_lines = array_filter([
+			'Pravno lice: ' . ($company_name ?: $buyer['name']),
+			$buyer['addr1'],
+			$buyer['addr2'],
+			$buyer['city'],
+			$buyer['email'],
+			$buyer['phone'],
+		]);
+		
+		// Add company details to buyer lines
+		if ( $company_mb ) {
+			$buyer_lines[] = 'Maticni broj: ' . $company_mb;
+		}
+		if ( $company_pib ) {
+			$buyer_lines[] = 'PIB: ' . $company_pib;
+		}
+	} else {
+		// For FAKTURA, show individual details without labels
+		$buyer_lines = array_filter([
+			$buyer['name'],
+			$buyer['addr1'],
+			$buyer['addr2'],
+			$buyer['city'],
+			$buyer['email'],
+			$buyer['phone'],
+		]);
+	}
 
 	// Numbers formatting helper (plain text)
 	$fmt_money = function( $amount ) use ( $order ){
@@ -50,9 +77,13 @@ add_action('woocommerce_thankyou', function( $order_id ){
 	$items = [];
 	foreach ( $order->get_items() as $item ) {
 		$product = $item->get_product();
+		$name = $item->get_name();
+		$sku = $product ? $product->get_sku() : '';
+		
+		// Use product name as-is (WooCommerce may already include SKU)
 		$items[] = [
-			'name'  => $item->get_name(),
-			'sku'   => $product ? $product->get_sku() : '',
+			'name'  => $name,
+			'sku'   => $sku,
 			'qty'   => (int) $item->get_quantity(),
 			'total' => $fmt_money( $item->get_total() ),
 		];

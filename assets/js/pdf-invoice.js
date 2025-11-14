@@ -86,12 +86,18 @@
 
     // Logo at top left (if available via context)
     var ctx = window.SU_PDF_CTX || {};
+    console.log('SU_PDF_CTX:', ctx);
+    console.log('SU_LOGO_PATH:', ctx.SU_LOGO_PATH);
     if(ctx.SU_LOGO_PATH){
       try {
+        console.log('Adding logo to PDF...');
         doc.addImage(ctx.SU_LOGO_PATH, 'PNG', margin, margin, 40, 0);
+        console.log('Logo added successfully!');
       } catch(e) {
-        console.warn('Logo failed to load:', e);
+        console.error('Logo failed to load:', e);
       }
+    } else {
+      console.warn('SU_LOGO_PATH not found in context');
     }
 
     // Seller info top-right

@@ -20,7 +20,17 @@ function su_generate_invoice_pdf_server_side( $order_id ) {
 	// Build invoice data
 	$customer_type = $order->get_meta('customer_type');
 	$is_company = ($customer_type === 'company');
-	$doc_title = $is_company ? 'PROFAKTURA' : 'FAKTURA';
+	$order_status = $order->get_status();
+	
+	// Determine document type:
+	// - Company + not completed → PROFAKTURA
+	// - Company + completed → FAKTURA
+	// - Individual → always FAKTURA
+	if ( $is_company && $order_status !== 'completed' ) {
+		$doc_title = 'PROFAKTURA';
+	} else {
+		$doc_title = 'FAKTURA';
+	}
 
 	$seller = [
 		'name'        => 'SoftUni doo',
@@ -40,6 +50,21 @@ function su_generate_invoice_pdf_server_side( $order_id ) {
 		'email' => trim($order->get_billing_email()),
 		'phone' => trim($order->get_billing_phone()),
 	];
+	
+	// For company (PROFAKTURA), add company details
+	if ( $is_company ) {
+		$company_name = trim($order->get_meta('billing_company'));
+		$company_mb = trim($order->get_meta('billing_mb'));
+		$company_pib = trim($order->get_meta('billing_pib'));
+		
+		// Override name with company name if provided
+		if ( $company_name ) {
+			$buyer['name'] = $company_name;
+		}
+		
+		$buyer['mb'] = $company_mb;
+		$buyer['pib'] = $company_pib;
+	}
 
 	$invoice_no = $order->get_meta('su_invoice_number');
 	if ( ! $invoice_no ) {
@@ -53,15 +78,32 @@ function su_generate_invoice_pdf_server_side( $order_id ) {
 	// Items
 	$items = [];
 	foreach ( $order->get_items() as $item_id => $item ) {
-		$name = wc_get_order_item_meta( $item_id, 'name', true );
-		if ( ! $name && is_object($item) && method_exists($item, 'get_name') ) {
+		// Get product name
+		$name = '';
+		if ( is_object($item) && method_exists($item, 'get_name') ) {
 			$name = $item->get_name();
 		}
+		if ( ! $name ) {
+			$name = wc_get_order_item_meta( $item_id, 'name', true );
+		}
 		$name = $name ? $name : __('Stavka', 'divi-child');
+		
+		// Get product SKU
+		$sku = '';
+		if ( is_object($item) && method_exists($item, 'get_product') ) {
+			$product = $item->get_product();
+			if ( $product && method_exists($product, 'get_sku') ) {
+				$sku = $product->get_sku();
+			}
+		}
+		
+		// Use ONLY the product name (WooCommerce already includes SKU in name if configured)
+		$item_name = $name;
+		
 		$qty = (int) wc_get_order_item_meta( $item_id, '_qty', true );
 		$line_total = (float) wc_get_order_item_meta( $item_id, '_line_total', true );
 		$items[] = [
-			'name'  => $name,
+			'name'  => $item_name,
 			'qty'   => $qty ?: 1,
 			'total' => wc_price( $line_total, ['currency' => $order->get_currency()] ),
 		];
@@ -140,12 +182,31 @@ function su_generate_invoice_pdf_server_side( $order_id ) {
 		$pdf->Cell(0, 5, 'Kupac:', 0, 1, 'L');
 		
 		$pdf->SetFont('dejavusans', '', 9);
-		$buyer_text = $buyer['name'] . "\n" .
-		              $buyer['addr1'] . "\n" .
-		              ($buyer['addr2'] ? $buyer['addr2'] . "\n" : '') .
-		              $buyer['city'] . "\n" .
-		              $buyer['email'] . "\n" .
-		              $buyer['phone'];
+		
+		// For PROFAKTURA, show company details with labels
+		if ( $is_company ) {
+			$buyer_text = "Pravno lice: " . $buyer['name'] . "\n" .
+			              $buyer['addr1'] . "\n" .
+			              ($buyer['addr2'] ? $buyer['addr2'] . "\n" : '') .
+			              $buyer['city'] . "\n" .
+			              $buyer['email'] . "\n" .
+			              $buyer['phone'];
+			
+			if ( !empty($buyer['mb']) ) {
+				$buyer_text .= "\nMaticni broj: " . $buyer['mb'];
+			}
+			if ( !empty($buyer['pib']) ) {
+				$buyer_text .= "\nPIB: " . $buyer['pib'];
+			}
+		} else {
+			// For FAKTURA, show individual details
+			$buyer_text = $buyer['name'] . "\n" .
+			              $buyer['addr1'] . "\n" .
+			              ($buyer['addr2'] ? $buyer['addr2'] . "\n" : '') .
+			              $buyer['city'] . "\n" .
+			              $buyer['email'] . "\n" .
+			              $buyer['phone'];
+		}
 		
 		$pdf->SetX(15);
 		$pdf->MultiCell(90, 5, $buyer_text, 0, 'L', 0, 0);
@@ -196,8 +257,12 @@ function su_generate_invoice_pdf_server_side( $order_id ) {
 			$bg_color = $row_bg ? ' style="background-color: #f9f9f9;"' : '';
 			// Strip HTML entities and tags from price
 			$clean_price = html_entity_decode(strip_tags($item['total']), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+			
+			// Convert \n to <br> for HTML display
+			$item_name_html = nl2br(htmlspecialchars($item['name']), false);
+			
 			$items_html .= '<tr' . $bg_color . '>
-				<td style="text-align: left;">' . htmlspecialchars($item['name']) . '</td>
+				<td style="text-align: left;">' . $item_name_html . '</td>
 				<td style="text-align: center;">' . htmlspecialchars($item['qty']) . '</td>
 				<td style="text-align: right;">' . htmlspecialchars($clean_price) . '</td>
 			</tr>';

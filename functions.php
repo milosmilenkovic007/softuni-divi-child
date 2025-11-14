@@ -63,4 +63,8 @@ if ( class_exists('WooCommerce') ) {
 	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-server-generator.php';
 	// Auto-generate PDF when order status changes to completed
 	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-auto-generate.php';
+	// Generate payment slip (uplatnica) for BACS orders
+	require_once DIVICHILD_PATH . '/inc/woocommerce/payment-slip-generator.php';
+	// Customize thank you page (hide payment icons, clean design)
+	require_once DIVICHILD_PATH . '/inc/woocommerce/thankyou-customization.php';
 }

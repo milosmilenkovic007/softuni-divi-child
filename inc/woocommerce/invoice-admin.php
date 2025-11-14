@@ -43,9 +43,41 @@ function su_build_invoice_payload( $order ){
 		'email' => trim($order->get_billing_email()),
 		'phone' => trim($order->get_billing_phone()),
 	];
-	$buyer_lines = array_filter([
-		$buyer['name'], $buyer['addr1'], $buyer['addr2'], $buyer['city'], $buyer['email'], $buyer['phone'],
-	]);
+	
+	// For company (PROFAKTURA), add company details
+	if ( $is_company ) {
+		$company_name = trim($order->get_meta('billing_company'));
+		$company_mb = trim($order->get_meta('billing_mb'));
+		$company_pib = trim($order->get_meta('billing_pib'));
+		
+		// For PROFAKTURA, show company details with labels
+		$buyer_lines = array_filter([
+			'Pravno lice: ' . ($company_name ?: $buyer['name']),
+			$buyer['addr1'],
+			$buyer['addr2'],
+			$buyer['city'],
+			$buyer['email'],
+			$buyer['phone'],
+		]);
+		
+		// Add company details to buyer lines
+		if ( $company_mb ) {
+			$buyer_lines[] = 'Maticni broj: ' . $company_mb;
+		}
+		if ( $company_pib ) {
+			$buyer_lines[] = 'PIB: ' . $company_pib;
+		}
+	} else {
+		// For FAKTURA, show individual details without labels
+		$buyer_lines = array_filter([
+			$buyer['name'], 
+			$buyer['addr1'], 
+			$buyer['addr2'], 
+			$buyer['city'], 
+			$buyer['email'], 
+			$buyer['phone'],
+		]);
+	}
 
 	$fmt_money = function( $amount ) use ( $order ){
 		return html_entity_decode( wp_strip_all_tags( wc_price( $amount, [ 'currency' => $order->get_currency() ] ) ), ENT_QUOTES, 'UTF-8' );
@@ -53,13 +85,35 @@ function su_build_invoice_payload( $order ){
 
 	$items = [];
 	foreach ( $order->get_items() as $item_id => $item ) {
-		$name = wc_get_order_item_meta( $item_id, 'name', true );
-		if ( ! $name && is_object($item) && function_exists('wc_get_order_item_name') ) { $name = wc_get_order_item_name( $item ); }
-		if ( ! $name && is_object($item) && property_exists($item, 'legacy_values') && isset($item->legacy_values['name']) ) { $name = (string) $item->legacy_values['name']; }
+		// Get product name from item
+		$name = '';
+		if ( is_object($item) && method_exists($item, 'get_name') ) {
+			$name = $item->get_name();
+		}
+		if ( ! $name ) {
+			$name = wc_get_order_item_meta( $item_id, 'name', true );
+		}
 		$name = $name ? $name : __('Stavka', 'divi-child');
+		
+		// Get product SKU
+		$sku = '';
+		if ( is_object($item) && method_exists($item, 'get_product') ) {
+			$product = $item->get_product();
+			if ( $product && method_exists($product, 'get_sku') ) {
+				$sku = $product->get_sku();
+			}
+		}
+		
 		$qty   = (int) wc_get_order_item_meta( $item_id, '_qty', true );
 		$line_total = (float) wc_get_order_item_meta( $item_id, '_line_total', true );
-		$items[] = [ 'name' => $name, 'sku' => '', 'qty' => $qty ?: 1, 'total' => $fmt_money( $line_total ) ];
+		
+		// Use product name as-is (WooCommerce may already include SKU)
+		$items[] = [ 
+			'name' => $name, 
+			'sku' => $sku, 
+			'qty' => $qty ?: 1, 
+			'total' => $fmt_money( $line_total ) 
+		];
 	}
 
 	return [

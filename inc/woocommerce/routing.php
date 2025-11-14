@@ -6,10 +6,18 @@ if (!defined('ABSPATH')) { exit; }
 
 // Always use the custom checkout template for Woo checkout requests
 add_filter('template_include', function($template){
+	// Handle thank you / order received page with custom template
+	$on_thankyou = function_exists('is_order_received_page') ? is_order_received_page() : false;
+	if ( $on_thankyou ) {
+		$custom_thankyou = DIVICHILD_PATH . '/page-templates/thankyou-custom.php';
+		if ( file_exists($custom_thankyou) ) { 
+			return $custom_thankyou; 
+		}
+	}
+	
 	if ( function_exists('is_checkout') && is_checkout() ){
-		// Do NOT override the payment page (order-pay) or order received page
+		// Do NOT override the payment page (order-pay)
 		$on_pay_page = function_exists('is_checkout_pay_page') ? is_checkout_pay_page() : false;
-		$on_thankyou = function_exists('is_order_received_page') ? is_order_received_page() : false;
 		if ( ! $on_pay_page && ! $on_thankyou ){
 			$custom = DIVICHILD_PATH . '/page-templates/checkout-custom.php';
 			if ( file_exists($custom) ) { return $custom; }

@@ -99,11 +99,20 @@ add_action('admin_enqueue_scripts', function( $hook ){
 	$rel = '/assets/js/pdf-invoice.js';
 	if ( file_exists( $theme_dir . $rel ) ) {
 		wp_enqueue_script('divi-child-pdf-invoice', $theme_uri . $rel, ['jquery','jspdf','jspdf-autotable'], filemtime($theme_dir . $rel), true);
+		
+		// Convert logo to base64 for jsPDF
+		$logo_path = $theme_dir . '/assets/img/softunilogo.png';
+		$logo_base64 = '';
+		if ( file_exists($logo_path) ) {
+			$logo_data = file_get_contents($logo_path);
+			$logo_base64 = 'data:image/png;base64,' . base64_encode($logo_data);
+		}
+		
 		$inline = [
 			'SU_INVOICE_AJAX_URL' => admin_url('admin-ajax.php'),
 			'SU_THEME_URL'        => $theme_uri,
 			'SU_FONTS_PATH'       => $theme_uri . '/assets/fonts',
-			'SU_LOGO_PATH'        => $theme_uri . '/assets/img/softunilogo.png'
+			'SU_LOGO_PATH'        => $logo_base64 ?: ($theme_uri . '/assets/img/softunilogo.png')
 		];
 		wp_add_inline_script('divi-child-pdf-invoice', 'window.SU_PDF_CTX = '. wp_json_encode( $inline ) .';', 'before');
 	}

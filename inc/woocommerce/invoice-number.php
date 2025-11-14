@@ -98,51 +98,121 @@ add_action('admin_menu', 'su_dc_register_invoices_submenu', 55);
 
 function su_dc_render_invoices_page(){
 	if ( ! current_user_can('manage_woocommerce') ) { wp_die('Nedovoljno privilegija.'); }
+	
 	$paged = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
 	$per_page = 20;
+	
+	// Use WC Order Query for HPOS compatibility
 	$args = [
-		'post_type'      => 'shop_order',
-		'post_status'    => array_keys( wc_get_order_statuses() ),
-		'posts_per_page' => $per_page,
-		'paged'          => $paged,
-		'meta_key'       => 'su_invoice_number',
-		'orderby'        => 'meta_value_num',
-		'order'          => 'DESC',
+		'limit'      => $per_page,
+		'page'       => $paged,
+		'orderby'    => 'date',
+		'order'      => 'DESC',
+		'return'     => 'ids',
+		'meta_query' => [
+			[
+				'key'     => 'su_invoice_number',
+				'compare' => 'EXISTS'
+			]
+		],
 	];
-	$q = new WP_Query( $args );
-	echo '<div class="wrap"><h1>Fakture</h1>';
-	if ( $q->have_posts() ) {
-		echo '<table class="widefat striped"><thead><tr>';
-		echo '<th>Broj</th><th>Tip</th><th>Porudžbina</th><th>Datum</th><th>Ukupno</th><th>Kupac</th><th>PDF</th>';
-		echo '</tr></thead><tbody>';
-		while ( $q->have_posts() ) { $q->the_post(); $order = wc_get_order( get_the_ID() );
+	
+	$order_ids = wc_get_orders( $args );
+	
+	// Get total count for pagination
+	$args_count = $args;
+	$args_count['limit'] = -1;
+	$args_count['paginate'] = true;
+	$results = wc_get_orders( $args_count );
+	$total_orders = $results->total;
+	$total_pages = ceil( $total_orders / $per_page );
+	
+	echo '<div class="wrap">';
+	echo '<h1 class="wp-heading-inline">Fakture</h1>';
+	echo '<hr class="wp-header-end">';
+	
+	if ( ! empty( $order_ids ) ) {
+		echo '<table class="wp-list-table widefat fixed striped table-view-list">';
+		echo '<thead><tr>';
+		echo '<th class="manage-column column-primary">Ime i Prezime</th>';
+		echo '<th class="manage-column">Broj Porudžbine</th>';
+		echo '<th class="manage-column">Broj Fakture</th>';
+		echo '<th class="manage-column">Tip</th>';
+		echo '<th class="manage-column">Faktura (PDF)</th>';
+		echo '</tr></thead>';
+		echo '<tbody>';
+		
+		foreach ( $order_ids as $order_id ) {
+			$order = wc_get_order( $order_id );
+			if ( ! $order ) { continue; }
+			
 			$inv_no = $order->get_meta('su_invoice_number');
 			$doc_type = $order->get_meta('su_pdf_title');
 			$pdf_url = $order->get_meta('su_pdf_url');
-			$customer = $order->get_formatted_billing_full_name();
-			$dt = $order->get_date_created();
+			$pdf_path = $order->get_meta('su_pdf_path');
+			
+			$customer_name = $order->get_formatted_billing_full_name();
+			$order_number = $order->get_order_number();
 			$link_order = admin_url( 'admin.php?page=wc-orders&action=edit&id=' . $order->get_id() );
+			
+			// Check if PDF file actually exists
+			$pdf_exists = $pdf_path && file_exists($pdf_path);
+			
 			echo '<tr>';
-			echo '<td>' . esc_html( $inv_no ) . '</td>';
-			echo '<td>' . esc_html( $doc_type ? $doc_type : '—' ) . '</td>';
-			echo '<td><a href="' . esc_url( $link_order ) . '">#' . esc_html( $order->get_order_number() ) . '</a></td>';
-			echo '<td>' . esc_html( $dt ? $dt->date_i18n( 'Y-m-d H:i' ) : '' ) . '</td>';
-			echo '<td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td>';
-			echo '<td>' . esc_html( $customer ) . '</td>';
-			echo '<td>' . ( $pdf_url ? '<a target="_blank" rel="noopener" href="' . esc_url( $pdf_url ) . '">Preuzmi</a>' : '—' ) . '</td>';
+			echo '<td class="column-primary" data-colname="Ime i Prezime">';
+			echo '<strong>' . esc_html( $customer_name ) . '</strong>';
+			echo '</td>';
+			
+			echo '<td data-colname="Broj Porudžbine">';
+			echo '<a href="' . esc_url( $link_order ) . '">#' . esc_html( $order_number ) . '</a>';
+			echo '</td>';
+			
+			echo '<td data-colname="Broj Fakture">';
+			echo esc_html( $inv_no ? $inv_no : '—' );
+			echo '</td>';
+			
+			echo '<td data-colname="Tip">';
+			echo '<span class="dashicons ' . ($doc_type === 'PROFAKTURA' ? 'dashicons-businessperson' : 'dashicons-admin-users') . '"></span> ';
+			echo esc_html( $doc_type ? $doc_type : '—' );
+			echo '</td>';
+			
+			echo '<td data-colname="Faktura (PDF)">';
+			if ( $pdf_exists && $pdf_url ) {
+				echo '<a href="' . esc_url( $pdf_url ) . '" target="_blank" rel="noopener" class="button button-small">';
+				echo '<span class="dashicons dashicons-pdf" style="vertical-align: middle;"></span> Preuzmi';
+				echo '</a>';
+			} else {
+				echo '<span style="color: #999;">Nema PDF-a</span>';
+			}
+			echo '</td>';
+			
 			echo '</tr>';
 		}
+		
 		echo '</tbody></table>';
-		$total_pages = $q->max_num_pages;
+		
+		// Pagination
 		if ( $total_pages > 1 ) {
-			$base = add_query_arg( 'paged', '%#%' );
-			echo '<div class="tablenav"><div class="tablenav-pages">';
-			echo paginate_links( [ 'base' => $base, 'format' => '', 'current' => $paged, 'total' => $total_pages ] );
-			echo '</div></div>';
+			echo '<div class="tablenav bottom">';
+			echo '<div class="tablenav-pages">';
+			echo paginate_links([
+				'base'      => add_query_arg( 'paged', '%#%' ),
+				'format'    => '',
+				'current'   => $paged,
+				'total'     => $total_pages,
+				'prev_text' => '&laquo;',
+				'next_text' => '&raquo;',
+			]);
+			echo '</div>';
+			echo '</div>';
 		}
 	} else {
-		echo '<p>Još uvek nema sačuvanih faktura.</p>';
+		echo '<div class="notice notice-info inline"><p>';
+		echo '<strong>Nema generisanih faktura.</strong><br>';
+		echo 'Fakture se automatski generišu kada porudžbina bude u statusu "Completed", ';
+		echo 'ili možete manualno generisati klikom na dugme "Generisi Fakturu" u svakoj porudžbini.';
+		echo '</p></div>';
 	}
-	wp_reset_postdata();
+	
 	echo '</div>';
 }

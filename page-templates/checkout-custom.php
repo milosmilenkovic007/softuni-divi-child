@@ -16,10 +16,24 @@ if ( function_exists( 'WC' ) ) {
   }
   // Place order
   if ( $_SERVER['REQUEST_METHOD'] === 'POST' && isset( $_POST['cc_place_order'] ) ) {
+    error_log("CC Checkout: POST request received, starting order processing");
+    error_log("CC Checkout: Payment method from POST: " . (isset($_POST['payment_method']) ? $_POST['payment_method'] : 'NOT SET'));
+    
+    // Also output to screen for immediate debugging
+    echo '<div style="background: yellow; padding: 20px; margin: 20px; border: 2px solid red;">';
+    echo '<h2>DEBUG: Order Processing Started</h2>';
+    echo '<p>Payment Method: ' . (isset($_POST['payment_method']) ? esc_html($_POST['payment_method']) : 'NOT SET') . '</p>';
+    echo '<p>Customer Type: ' . (isset($_POST['customer_type']) ? esc_html($_POST['customer_type']) : 'NOT SET') . '</p>';
+    echo '</div>';
+    
     $nonce = isset($_POST['cc_checkout_nonce']) ? sanitize_text_field( wp_unslash($_POST['cc_checkout_nonce']) ) : '';
     if ( ! wp_verify_nonce( $nonce, 'cc_checkout' ) ) {
+      error_log("CC Checkout: Nonce verification FAILED");
+      echo '<div style="background: red; color: white; padding: 20px;">NONCE FAILED!</div>';
       wc_add_notice( __( 'Bezbednosna greška. Molimo pokušajte ponovo.', 'divi-child' ), 'error' );
     } else {
+      error_log("CC Checkout: Nonce verified successfully");
+      echo '<div style="background: green; color: white; padding: 20px;">NONCE OK! Processing...</div>';
       // Server-side validation of required fields
       $errors = array();
       $ctype = isset($_POST['customer_type']) ? sanitize_text_field( wp_unslash($_POST['customer_type']) ) : 'individual';
@@ -63,24 +77,38 @@ if ( function_exists( 'WC' ) ) {
         foreach( $creq as $key => $label ){
           if ( empty( $_POST[$key] ) ) { $errors[] = sprintf( 'Polje %s je obavezno.', $label ); }
         }
-        // At least one participant with name and email
-        if ( empty( $_POST['participants'] ) || ! is_array( $_POST['participants'] ) ) {
-          $errors[] = 'Dodajte bar jednog polaznika.';
-        } else {
-          $valid_any = false;
+        // Validate participants only if they are provided
+        if ( ! empty( $_POST['participants'] ) && is_array( $_POST['participants'] ) ) {
+          $has_any_participant = false;
           foreach( $_POST['participants'] as $p ){
             $fn = isset($p['full_name']) ? trim( wp_unslash( $p['full_name'] ) ) : '';
             $em = isset($p['email']) ? trim( wp_unslash( $p['email'] ) ) : '';
-            if ( $fn && is_email( $em ) ) { $valid_any = true; break; }
+            // Check if this participant has any data entered
+            if ( $fn || $em ) {
+              $has_any_participant = true;
+              // If data is entered, both name and valid email are required
+              if ( ! $fn || ! is_email( $em ) ) {
+                $errors[] = 'Polaznik mora imati ime i ispravan e‑mail.';
+                break;
+              }
+            }
           }
-          if ( ! $valid_any ) { $errors[] = 'Polaznik mora imati ime i ispravan e‑mail.'; }
         }
+        // No error if no participants provided - company representative is the only participant
       }
       if ( ! empty( $errors ) ){
-        foreach( $errors as $msg ){ wc_add_notice( $msg, 'error' ); }
+        echo '<div style="background: orange; color: white; padding: 20px; font-weight: bold;">VALIDATION ERRORS FOUND!</div>';
+        echo '<div style="background: darkorange; color: white; padding: 10px;"><strong>Errors:</strong><ul>';
+        foreach( $errors as $msg ){ 
+          echo '<li>' . esc_html($msg) . '</li>';
+          wc_add_notice( $msg, 'error' ); 
+        }
+        echo '</ul></div>';
         // Skip order creation; let template render and show notices
         return;
       }
+
+      echo '<div style="background: lightblue; padding: 20px;">DEBUG: Validation passed, creating order...</div>';
 
       $checkout = WC()->checkout();
       $keys = array(
@@ -101,7 +129,23 @@ if ( function_exists( 'WC' ) ) {
         if ( is_wp_error( $order_id ) ) {
           throw new Exception( $order_id->get_error_message() );
         }
+        echo '<div style="background: magenta; color: white; padding: 20px;">DEBUG: Order created! ID: ' . $order_id . '</div>';
+        
         $order = wc_get_order( $order_id );
+
+        // Save custom company meta data explicitly
+        if ( isset($data['customer_type']) ) {
+          $order->update_meta_data( 'customer_type', $data['customer_type'] );
+        }
+        if ( isset($data['billing_company']) && !empty($data['billing_company']) ) {
+          $order->update_meta_data( 'billing_company', $data['billing_company'] );
+        }
+        if ( isset($data['billing_mb']) && !empty($data['billing_mb']) ) {
+          $order->update_meta_data( 'billing_mb', $data['billing_mb'] );
+        }
+        if ( isset($data['billing_pib']) && !empty($data['billing_pib']) ) {
+          $order->update_meta_data( 'billing_pib', $data['billing_pib'] );
+        }
 
         // Save participants if sent
         if ( isset($_POST['participants']) && is_array($_POST['participants']) ) {
@@ -119,23 +163,73 @@ if ( function_exists( 'WC' ) ) {
         // Ensure the order has the selected payment method set
         $payment_method = isset( $data['payment_method'] ) ? $data['payment_method'] : '';
         $available = WC()->payment_gateways()->get_available_payment_gateways();
+        
+        echo '<div style="background: lightgreen; padding: 20px;">DEBUG: Payment method: ' . esc_html($payment_method) . ' | Available: ' . esc_html(implode(', ', array_keys($available))) . '</div>';
+        
+        error_log("CC Checkout: Payment method selected: " . $payment_method);
+        error_log("CC Checkout: Available gateways: " . implode(', ', array_keys($available)));
+        
         if ( $payment_method && isset( $available[ $payment_method ] ) ) {
           $order->set_payment_method( $available[ $payment_method ] );
+          echo '<div style="background: lime; padding: 20px;">DEBUG: Payment method SET on order</div>';
         }
         $order->save();
+        echo '<div style="background: aqua; padding: 20px;">DEBUG: Order SAVED</div>';
 
         // Process payment and redirect
         if ( $payment_method && isset( $available[ $payment_method ] ) ) {
-          $result = $available[ $payment_method ]->process_payment( $order_id );
+          $gateway = $available[ $payment_method ];
+          
+          error_log("CC Checkout: Processing payment with gateway: " . get_class($gateway));
+          
+          // For gateways like BACS (bank transfer) that don't require immediate processing
+          if ( in_array( $payment_method, ['bacs', 'cheque', 'cod'], true ) ) {
+            echo '<div style="background: yellow; color: black; padding: 20px;">DEBUG: Manual payment method branch entered!</div>';
+            
+            error_log("CC Checkout: Manual payment method detected, setting on-hold");
+            
+            // Set order status to on-hold for manual payment methods
+            $order->update_status( 'on-hold', __('Ceka se uplata.', 'divi-child') );
+            echo '<div style="background: orange; padding: 20px;">DEBUG: Order status set to on-hold</div>';
+            
+            // Empty cart
+            WC()->cart->empty_cart();
+            echo '<div style="background: pink; padding: 20px;">DEBUG: Cart emptied</div>';
+            
+            $redirect_url = $order->get_checkout_order_received_url();
+            echo '<div style="background: violet; padding: 20px;">DEBUG: Redirect URL: ' . esc_html($redirect_url) . '</div>';
+            
+            error_log("CC Checkout: Redirecting to: " . $redirect_url);
+            
+            // Redirect to thank you page
+            wp_safe_redirect( $redirect_url );
+            exit;
+          }
+          
+          error_log("CC Checkout: Calling process_payment for gateway");
+          
+          // For other gateways (like credit card), process payment normally
+          $result = $gateway->process_payment( $order_id );
+          
+          error_log("CC Checkout: process_payment result: " . print_r($result, true));
+          
           if ( isset($result['result']) && 'success' === $result['result'] && ! empty( $result['redirect'] ) ) {
             wp_safe_redirect( $result['redirect'] );
             exit;
           }
         }
-        // Fallback
+        
+        error_log("CC Checkout: Fallback redirect");
+        
+        // Fallback - redirect to thank you page
+        WC()->cart->empty_cart();
         wp_safe_redirect( $order->get_checkout_order_received_url() );
         exit;
       } catch ( Exception $e ) {
+        echo '<div style="background: red; color: white; padding: 20px; font-weight: bold;">EXCEPTION CAUGHT: ' . esc_html($e->getMessage()) . '</div>';
+        echo '<div style="background: darkred; color: white; padding: 10px;">Stack trace: <pre>' . esc_html($e->getTraceAsString()) . '</pre></div>';
+        error_log("CC Checkout Exception: " . $e->getMessage());
+        error_log("CC Checkout Stack trace: " . $e->getTraceAsString());
         wc_add_notice( $e->getMessage(), 'error' );
       }
     }
