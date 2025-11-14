@@ -399,9 +399,6 @@ get_header();
 					</p>
 				</div>
 			<?php endif; ?>
-					</p>
-				</div>
-			<?php endif; ?>
 		</div>
 	</div>
 	
