@@ -291,7 +291,7 @@ get_header();
           <input type="hidden" name="cc_place_order" value="1" />
           <?php wp_nonce_field( 'cc_checkout', 'cc_checkout_nonce' ); ?>
           <div class="cc-section">
-            <h2 class="cc-section__title">Način dostave</h2>
+            <h2 class="cc-section__title">Detalji korisnika</h2>
             <div class="cc-card">
               <div class="cc-row">
                 <div class="cc-field cc-field-select">
@@ -378,8 +378,8 @@ get_header();
 
               <div class="cc-row cc-row-wide">
                 <div class="cc-field cc-row-wide">
-                  <label for="cc_notes">Dodatne napomene kuriru (ili kurirskoj službi) u vezi sa isporukom</label>
-                  <textarea id="cc_notes" name="order_comments" placeholder="Ukoliko imate dodatne napomene radi lakše isporuke molimo Vas da ih ovde unesete"></textarea>
+                  <label for="cc_notes">Dodatne napomene</label>
+                  <textarea id="cc_notes" name="order_comments" placeholder="Ukoliko imate dodatne napomene molimo Vas da ih ovde unesete"></textarea>
                 </div>
               </div>
 
