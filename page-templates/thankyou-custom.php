@@ -402,10 +402,25 @@ get_header();
 			$pdf_url = $order->get_meta('su_pdf_url');
 			$pdf_title = $order->get_meta('su_pdf_title') ?: 'FAKTURA';
 			$payment_slip_url = $order->get_meta('su_payment_slip_url');
+			$customer_type = $order->get_meta('customer_type');
+			$order_status = $order->get_status();
+			
+			// Determine if we should show invoice/proforma button
+			$show_invoice = false;
+			if ( $pdf_url ) {
+				// Show PROFAKTURA for companies regardless of status
+				if ( $customer_type === 'company' && $pdf_title === 'PROFAKTURA' ) {
+					$show_invoice = true;
+				}
+				// Show FAKTURA only when order is completed
+				elseif ( $pdf_title === 'FAKTURA' && $order_status === 'completed' ) {
+					$show_invoice = true;
+				}
+			}
 			?>
 			
 			<div class="invoice-download">
-				<?php if ( $pdf_url ) : ?>
+				<?php if ( $show_invoice ) : ?>
 					<a href="<?php echo esc_url( $pdf_url ); ?>" class="invoice-btn" target="_blank">
 						📄 <?php echo esc_html( sprintf( __( '%s (PDF)', 'divi-child' ), $pdf_title ) ); ?>
 					</a>

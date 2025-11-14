@@ -19,13 +19,6 @@ if ( function_exists( 'WC' ) ) {
     error_log("CC Checkout: POST request received, starting order processing");
     error_log("CC Checkout: Payment method from POST: " . (isset($_POST['payment_method']) ? $_POST['payment_method'] : 'NOT SET'));
     
-    // Also output to screen for immediate debugging
-    echo '<div style="background: yellow; padding: 20px; margin: 20px; border: 2px solid red;">';
-    echo '<h2>DEBUG: Order Processing Started</h2>';
-    echo '<p>Payment Method: ' . (isset($_POST['payment_method']) ? esc_html($_POST['payment_method']) : 'NOT SET') . '</p>';
-    echo '<p>Customer Type: ' . (isset($_POST['customer_type']) ? esc_html($_POST['customer_type']) : 'NOT SET') . '</p>';
-    echo '</div>';
-    
     $nonce = isset($_POST['cc_checkout_nonce']) ? sanitize_text_field( wp_unslash($_POST['cc_checkout_nonce']) ) : '';
     if ( ! wp_verify_nonce( $nonce, 'cc_checkout' ) ) {
       error_log("CC Checkout: Nonce verification FAILED");
@@ -107,14 +100,6 @@ if ( function_exists( 'WC' ) ) {
         return;
       }
 
-      echo '<div style="background: lightblue; padding: 20px;">DEBUG: Validation passed, creating order...</div>';
-
-      // DEBUG: Check if participants are in POST
-      echo '<div style="background: yellow; color: black; padding: 20px;">DEBUG: Participants in POST: ' . (isset($_POST['participants']) ? 'YES - Count: ' . count($_POST['participants']) : 'NO') . '</div>';
-      if (isset($_POST['participants'])) {
-        echo '<div style="background: lime; padding: 20px;">DEBUG: Participants data: <pre>' . print_r($_POST['participants'], true) . '</pre></div>';
-      }
-
       $checkout = WC()->checkout();
       $keys = array(
         'billing_first_name','billing_last_name','billing_address_1','billing_address_2',
@@ -129,7 +114,6 @@ if ( function_exists( 'WC' ) ) {
           // Special handling for participants array to preserve structure
           if ( $k === 'participants' && is_array($v) ) {
             $data[$k] = $v; // Keep as-is, will be sanitized in the hook
-            echo '<div style="background: orange; padding: 20px;">DEBUG: Added participants to $data array</div>';
           } else {
             $data[$k] = is_array($v) ? wc_clean($v) : sanitize_text_field( $v );
           }
@@ -141,7 +125,6 @@ if ( function_exists( 'WC' ) ) {
         if ( is_wp_error( $order_id ) ) {
           throw new Exception( $order_id->get_error_message() );
         }
-        echo '<div style="background: magenta; color: white; padding: 20px;">DEBUG: Order created! ID: ' . $order_id . '</div>';
         
         $order = wc_get_order( $order_id );
 
@@ -165,17 +148,13 @@ if ( function_exists( 'WC' ) ) {
         $payment_method = isset( $data['payment_method'] ) ? $data['payment_method'] : '';
         $available = WC()->payment_gateways()->get_available_payment_gateways();
         
-        echo '<div style="background: lightgreen; padding: 20px;">DEBUG: Payment method: ' . esc_html($payment_method) . ' | Available: ' . esc_html(implode(', ', array_keys($available))) . '</div>';
-        
         error_log("CC Checkout: Payment method selected: " . $payment_method);
         error_log("CC Checkout: Available gateways: " . implode(', ', array_keys($available)));
         
         if ( $payment_method && isset( $available[ $payment_method ] ) ) {
           $order->set_payment_method( $available[ $payment_method ] );
-          echo '<div style="background: lime; padding: 20px;">DEBUG: Payment method SET on order</div>';
         }
         $order->save();
-        echo '<div style="background: aqua; padding: 20px;">DEBUG: Order SAVED</div>';
 
         // Process payment and redirect
         if ( $payment_method && isset( $available[ $payment_method ] ) ) {
@@ -185,20 +164,16 @@ if ( function_exists( 'WC' ) ) {
           
           // For gateways like BACS (bank transfer) that don't require immediate processing
           if ( in_array( $payment_method, ['bacs', 'cheque', 'cod'], true ) ) {
-            echo '<div style="background: yellow; color: black; padding: 20px;">DEBUG: Manual payment method branch entered!</div>';
             
             error_log("CC Checkout: Manual payment method detected, setting on-hold");
             
             // Set order status to on-hold for manual payment methods
             $order->update_status( 'on-hold', __('Ceka se uplata.', 'divi-child') );
-            echo '<div style="background: orange; padding: 20px;">DEBUG: Order status set to on-hold</div>';
             
             // Empty cart
             WC()->cart->empty_cart();
-            echo '<div style="background: pink; padding: 20px;">DEBUG: Cart emptied</div>';
             
             $redirect_url = $order->get_checkout_order_received_url();
-            echo '<div style="background: violet; padding: 20px;">DEBUG: Redirect URL: ' . esc_html($redirect_url) . '</div>';
             
             error_log("CC Checkout: Redirecting to: " . $redirect_url);
             

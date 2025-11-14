@@ -282,18 +282,6 @@
 
     // Validation on submit
     $('#cc-form').on('submit', function(e){
-      // Debug: Log participants being submitted
-      var participantsData = [];
-      $('#cc-participants-list .cc-participant-item').each(function(i){
-        var $item = $(this);
-        participantsData.push({
-          name: $item.find('input[name="participants['+i+'][full_name]"]').val(),
-          email: $item.find('input[name="participants['+i+'][email]"]').val(),
-          phone: $item.find('input[name="participants['+i+'][phone]"]').val()
-        });
-      });
-      console.log('Participants to be submitted:', participantsData);
-      
       var isValid = validateCheckoutForm();
       if(!isValid){ e.preventDefault(); }
     });

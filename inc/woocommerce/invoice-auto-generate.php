@@ -20,9 +20,14 @@ function su_auto_generate_invoice_on_hold( $order_id, $order = null ) {
 	
 	$customer_type = $order->get_meta('customer_type');
 	
-	// Generate PROFAKTURA for companies, FAKTURA for individuals
-	error_log("SU Invoice: Auto-generating PDF for order #{$order_id} on " . $order->get_status() . " status. Customer type: {$customer_type}");
-	su_generate_invoice_pdf_server_side( $order_id );
+	// ONLY generate for companies (PROFAKTURA)
+	// For individuals, wait until order is completed
+	if ( $customer_type === 'company' ) {
+		error_log("SU Invoice: Auto-generating PROFAKTURA for company order #{$order_id} on on-hold status");
+		su_generate_invoice_pdf_server_side( $order_id );
+	} else {
+		error_log("SU Invoice: Skipping invoice generation for individual order #{$order_id} on on-hold status (will generate on completed)");
+	}
 }
 
 function su_auto_generate_invoice_on_completed( $order_id, $order = null ){

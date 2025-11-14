@@ -9,11 +9,6 @@ if (!defined('ABSPATH')) { exit; }
 
 // Save custom meta when an order is created via Woo checkout
 add_action('woocommerce_checkout_create_order', function( $order, $data ){
-	// Debug: Log ALL POST data to see what's being sent
-	error_log('=== FULL POST DATA ===');
-	error_log(print_r($_POST, true));
-	error_log('=== END POST DATA ===');
-	
 	$customer_type = isset($_POST['customer_type']) ? sanitize_text_field( wp_unslash($_POST['customer_type']) ) : '';
 	$pib = isset($_POST['billing_pib']) ? sanitize_text_field( wp_unslash($_POST['billing_pib']) ) : '';
 	$mb  = isset($_POST['billing_mb'])  ? sanitize_text_field( wp_unslash($_POST['billing_mb']) )  : '';
@@ -26,8 +21,6 @@ add_action('woocommerce_checkout_create_order', function( $order, $data ){
 	if ($company)       { $order->update_meta_data('billing_company', $company); }
 	
 	// Save participants if provided
-	error_log('Checking participants in POST: ' . print_r($_POST['participants'] ?? 'NOT SET', true));
-	
 	if ( isset($_POST['participants']) && is_array($_POST['participants']) ) {
 		$participants = array();
 		foreach ( $_POST['participants'] as $p ) {
@@ -44,12 +37,7 @@ add_action('woocommerce_checkout_create_order', function( $order, $data ){
 		
 		if ( !empty($participants) ) {
 			$order->update_meta_data( 'participants', $participants );
-			error_log('Saved participants: ' . print_r($participants, true));
-		} else {
-			error_log('No valid participants to save');
 		}
-	} else {
-		error_log('Participants not in POST or not array');
 	}
 }, 10, 2);
 
