@@ -394,7 +394,28 @@ get_header();
           <h3>Pregled narudžbine</h3>
           <div class="cc-summary__content" id="cc-order-review">
             <div class="cc-summary__row">
-              <span>Narudžbina</span>
+              <span>
+                <?php 
+                // Display product name(s) instead of generic "Narudžbina"
+                if ( function_exists( 'WC' ) && WC()->cart ) {
+                  $cart_items = WC()->cart->get_cart();
+                  $product_names = array();
+                  foreach ( $cart_items as $cart_item ) {
+                    $product = $cart_item['data'];
+                    if ( $product ) {
+                      $product_names[] = $product->get_name();
+                    }
+                  }
+                  if ( !empty($product_names) ) {
+                    echo esc_html( implode(', ', $product_names) );
+                  } else {
+                    echo 'Narudžbina';
+                  }
+                } else {
+                  echo 'Narudžbina';
+                }
+                ?>
+              </span>
               <span class="cc-subtotal-amount"><?php echo function_exists( 'WC' ) ? wp_kses_post( WC()->cart->get_cart_subtotal() ) : '—'; ?></span>
             </div>
             <div class="cc-summary__total">
