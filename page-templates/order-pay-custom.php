@@ -388,9 +388,21 @@ get_header();
 			<!-- Payment Action -->
 			<?php if ( $order->needs_payment() ) : ?>
 				<div class="payment-action-inline">
-					<a href="<?php echo esc_url( add_query_arg( 'pay_for_order', 'true', $order->get_checkout_payment_url() ) ); ?>" class="button-proceed" style="display: inline-block; text-decoration: none;">
-						<?php esc_html_e( 'Plati narudžbinu', 'divi-child' ); ?>
-					</a>
+					<?php
+					// Directly call NestPay receipt page to generate payment form
+					$chosen_payment_method = $order->get_payment_method();
+					
+					if ( $chosen_payment_method ) {
+						// This will render the NestPay payment form with proper hash
+						do_action( 'woocommerce_receipt_' . $chosen_payment_method, $order->get_id() );
+					} else {
+						?>
+						<p style="color: #dc3545; font-weight: 600;">
+							<?php esc_html_e( 'Način plaćanja nije dostupan. Molimo kontaktirajte podršku.', 'divi-child' ); ?>
+						</p>
+						<?php
+					}
+					?>
 				</div>
 			<?php else : ?>
 				<div class="payment-action-inline">

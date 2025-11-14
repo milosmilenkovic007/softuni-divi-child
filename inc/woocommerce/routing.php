@@ -7,7 +7,6 @@ if (!defined('ABSPATH')) { exit; }
 // Always use the custom checkout template for Woo checkout requests
 add_filter('template_include', function($template){
 	// Handle order-pay page (credit card payment)
-	// Skip custom template if pay_for_order is set (need default WC template for NestPay processing)
 	$is_order_pay = false;
 	if ( function_exists('is_checkout_pay_page') && is_checkout_pay_page() ) {
 		$is_order_pay = true;
@@ -17,7 +16,7 @@ add_filter('template_include', function($template){
 		error_log('Routing: Detected order-pay via URL pattern. URI: ' . $_SERVER['REQUEST_URI']);
 	}
 	
-	if ( $is_order_pay && ! isset($_GET['pay_for_order']) ) {
+	if ( $is_order_pay ) {
 		$custom_orderpay = DIVICHILD_PATH . '/page-templates/order-pay-custom.php';
 		if ( file_exists($custom_orderpay) ) {
 			error_log('Routing: Using custom order-pay template: ' . $custom_orderpay);
@@ -25,10 +24,6 @@ add_filter('template_include', function($template){
 		} else {
 			error_log('Routing: Custom order-pay template NOT FOUND: ' . $custom_orderpay);
 		}
-	} elseif ( $is_order_pay && isset($_GET['pay_for_order']) ) {
-		error_log('Routing: Skipping custom template - pay_for_order set, using default WC template for NestPay');
-		// Return default template to let WooCommerce handle NestPay processing
-		return $template;
 	}
 	
 	// Handle thank you / order received page with custom template
