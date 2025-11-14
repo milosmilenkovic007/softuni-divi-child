@@ -274,6 +274,52 @@ function su_generate_invoice_pdf_server_side( $order_id ) {
 		$pdf->SetFont('dejavusans', '', 9);
 		$pdf->writeHTML($items_html, true, false, true, false, '');
 		
+		// Participants section (if company and participants exist)
+		if ( $is_company ) {
+			$participants_data = $order->get_meta('participants');
+			$participants = [];
+			
+			// Handle both array and JSON string format
+			if ( is_array($participants_data) ) {
+				$participants = $participants_data;
+			} elseif ( is_string($participants_data) ) {
+				$decoded = json_decode($participants_data, true);
+				if (is_array($decoded)) { $participants = $decoded; }
+			}
+			
+			if ( !empty($participants) ) {
+				$pdf->Ln(10);
+				$pdf->SetFont('dejavusans', 'B', 11);
+				$pdf->Cell(0, 7, 'Polaznici:', 0, 1, 'L');
+				
+				$pdf->SetFont('dejavusans', '', 9);
+				$participants_html = '<table border="1" cellpadding="5" style="border-collapse: collapse; background-color: #f8f9fa;">
+					<thead>
+						<tr style="background-color: #234465; color: #fff; font-weight: bold;">
+							<th style="width: 60mm; text-align: left;">Ime i prezime</th>
+							<th style="width: 70mm; text-align: left;">E-mail</th>
+							<th style="width: 50mm; text-align: left;">Telefon</th>
+						</tr>
+					</thead>
+					<tbody>';
+				
+				foreach ($participants as $idx => $p) {
+					$full_name = isset($p['full_name']) ? htmlspecialchars($p['full_name']) : '';
+					$email = isset($p['email']) ? htmlspecialchars($p['email']) : '';
+					$phone = isset($p['phone']) ? htmlspecialchars($p['phone']) : '';
+					
+					$participants_html .= '<tr>
+						<td style="text-align: left;">' . $full_name . '</td>
+						<td style="text-align: left;">' . $email . '</td>
+						<td style="text-align: left;">' . $phone . '</td>
+					</tr>';
+				}
+				
+				$participants_html .= '</tbody></table>';
+				$pdf->writeHTML($participants_html, true, false, true, false, '');
+			}
+		}
+		
 		// Total section - only UKUPNO
 		$pdf->Ln(8);
 		$pdf->SetFont('dejavusans', 'B', 13);

@@ -43,11 +43,10 @@ if ( function_exists( 'WC' ) ) {
         'billing_address_1'  => 'Ulica',
         'billing_city'       => 'Grad',
         'billing_postcode'   => 'Poštanski broj',
-        'billing_phone'      => 'Telefon',
         'billing_email'      => 'E‑mail'
       );
-      // Additional address number
-      if ( empty( $_POST['address_number'] ) ) { $errors[] = 'Unesite broj ulice.'; }
+      // Additional address number - NOT REQUIRED
+      // if ( empty( $_POST['address_number'] ) ) { $errors[] = 'Unesite broj ulice.'; }
       foreach( $req as $key => $label ){
         if ( empty( $_POST[$key] ) ) { $errors[] = sprintf( 'Polje %s je obavezno.', $label ); }
       }
@@ -61,7 +60,7 @@ if ( function_exists( 'WC' ) ) {
           $errors[] = 'Poštanski broj mora imati 5 cifara.';
         }
       }
-      // Phone: accept formats starting with +381 or 0, with digits and optional separators
+      // Phone: OPTIONAL - validate only if provided
       if ( ! empty( $_POST['billing_phone'] ) ) {
         $ph = trim( wp_unslash( $_POST['billing_phone'] ) );
         if ( ! preg_match( '/^(\+381|0)[0-9\s\-()]{6,}$/', $ph ) ) {
@@ -110,17 +109,30 @@ if ( function_exists( 'WC' ) ) {
 
       echo '<div style="background: lightblue; padding: 20px;">DEBUG: Validation passed, creating order...</div>';
 
+      // DEBUG: Check if participants are in POST
+      echo '<div style="background: yellow; color: black; padding: 20px;">DEBUG: Participants in POST: ' . (isset($_POST['participants']) ? 'YES - Count: ' . count($_POST['participants']) : 'NO') . '</div>';
+      if (isset($_POST['participants'])) {
+        echo '<div style="background: lime; padding: 20px;">DEBUG: Participants data: <pre>' . print_r($_POST['participants'], true) . '</pre></div>';
+      }
+
       $checkout = WC()->checkout();
       $keys = array(
         'billing_first_name','billing_last_name','billing_address_1','billing_address_2',
         'billing_city','billing_postcode','billing_phone','billing_email','billing_country',
-        'order_comments','billing_company','billing_mb','billing_pib','customer_type','payment_method'
+        'order_comments','billing_company','billing_mb','billing_pib','customer_type','payment_method',
+        'participants' // Add participants to data passed to order creation
       );
       $data = array();
       foreach ( $keys as $k ) {
         if ( isset( $_POST[$k] ) ) {
           $v = wp_unslash( $_POST[$k] );
-          $data[$k] = is_array($v) ? wc_clean($v) : sanitize_text_field( $v );
+          // Special handling for participants array to preserve structure
+          if ( $k === 'participants' && is_array($v) ) {
+            $data[$k] = $v; // Keep as-is, will be sanitized in the hook
+            echo '<div style="background: orange; padding: 20px;">DEBUG: Added participants to $data array</div>';
+          } else {
+            $data[$k] = is_array($v) ? wc_clean($v) : sanitize_text_field( $v );
+          }
         }
       }
 
@@ -147,18 +159,7 @@ if ( function_exists( 'WC' ) ) {
           $order->update_meta_data( 'billing_pib', $data['billing_pib'] );
         }
 
-        // Save participants if sent
-        if ( isset($_POST['participants']) && is_array($_POST['participants']) ) {
-          $participants = array();
-          foreach ( $_POST['participants'] as $p ) {
-            $participants[] = array(
-              'full_name' => isset($p['full_name']) ? sanitize_text_field( wp_unslash($p['full_name']) ) : '',
-              'email'     => isset($p['email']) ? sanitize_email( wp_unslash($p['email']) ) : '',
-              'phone'     => isset($p['phone']) ? sanitize_text_field( wp_unslash($p['phone']) ) : '',
-            );
-          }
-          $order->update_meta_data( 'participants', wp_json_encode( $participants ) );
-        }
+        // Note: participants are saved via woocommerce_checkout_create_order hook in order-meta.php
 
         // Ensure the order has the selected payment method set
         $payment_method = isset( $data['payment_method'] ) ? $data['payment_method'] : '';
@@ -239,6 +240,60 @@ if ( function_exists( 'WC' ) ) {
 get_header();
 ?>
 
+<style>
+/* Custom Footer */
+.softuni-custom-footer {
+  background: #234465;
+  color: white;
+  padding: 25px 0;
+  margin-top: 60px;
+}
+
+.footer-content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.footer-left {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.footer-right {
+  display: flex;
+  gap: 25px;
+}
+
+.footer-right a {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  font-size: 14px;
+  transition: color 0.3s ease;
+}
+
+.footer-right a:hover {
+  color: #00ba96;
+}
+
+@media (max-width: 768px) {
+  .footer-content {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .footer-right {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+</style>
+
 <main id="primary" class="site-main custom-checkout">
   <div class="container custom-checkout__container">
     <?php 
@@ -275,11 +330,11 @@ get_header();
 
               <div class="cc-row">
                 <div class="cc-field cc-half">
-                  <label for="cc_first_name">Ime</label>
+                  <label for="cc_first_name">Ime <span style="color: red;">*</span></label>
                   <input type="text" id="cc_first_name" name="billing_first_name" placeholder="Ime" />
                 </div>
                 <div class="cc-field cc-half">
-                  <label for="cc_last_name">Prezime</label>
+                  <label for="cc_last_name">Prezime <span style="color: red;">*</span></label>
                   <input type="text" id="cc_last_name" name="billing_last_name" placeholder="Prezime" />
                 </div>
               </div>
@@ -295,22 +350,22 @@ get_header();
 
               <div class="cc-row cc-company cc-hidden" id="cc-company-block">
                 <div class="cc-field cc-row-wide">
-                  <label for="cc_company_name">Pravno lice</label>
+                  <label for="cc_company_name">Pravno lice <span style="color: red;">*</span></label>
                   <input type="text" id="cc_company_name" name="billing_company" />
                 </div>
                 <div class="cc-field cc-half">
-                  <label for="cc_company_mb">Matični broj</label>
+                  <label for="cc_company_mb">Matični broj <span style="color: red;">*</span></label>
                   <input type="text" id="cc_company_mb" name="billing_mb" />
                 </div>
                 <div class="cc-field cc-half">
-                  <label for="cc_company_pib">PIB</label>
+                  <label for="cc_company_pib">PIB <span style="color: red;">*</span></label>
                   <input type="text" id="cc_company_pib" name="billing_pib" />
                 </div>
               </div>
 
               <div class="cc-row cc-address">
                 <div class="cc-field cc-street">
-                  <label for="cc_street">Ulica</label>
+                  <label for="cc_street">Ulica <span style="color: red;">*</span></label>
                   <input type="text" id="cc_street" name="billing_address_1" />
                 </div>
                 <div class="cc-field cc-third">
@@ -326,11 +381,11 @@ get_header();
 
               <div class="cc-row">
                 <div class="cc-field cc-half">
-                  <label for="cc_city">Grad</label>
+                  <label for="cc_city">Grad <span style="color: red;">*</span></label>
                   <input type="text" id="cc_city" name="billing_city" />
                 </div>
                 <div class="cc-field cc-half">
-                  <label for="cc_postcode">Poštanski broj</label>
+                  <label for="cc_postcode">Poštanski broj <span style="color: red;">*</span></label>
                   <input type="text" id="cc_postcode" name="billing_postcode" />
                 </div>
               </div>
@@ -341,7 +396,7 @@ get_header();
                   <input type="text" id="cc_phone" name="billing_phone" placeholder="+381" />
                 </div>
                 <div class="cc-field cc-half">
-                  <label for="cc_email">E-mail</label>
+                  <label for="cc_email">E-mail <span style="color: red;">*</span></label>
                   <input type="email" id="cc_email" name="billing_email" />
                 </div>
               </div>
@@ -362,14 +417,14 @@ get_header();
       <aside class="cc-summary">
         <div class="cc-summary__card">
           <h3>Pregled narudžbine</h3>
-          <div class="cc-summary__content">
+          <div class="cc-summary__content" id="cc-order-review">
             <div class="cc-summary__row">
               <span>Narudžbina</span>
-              <span><?php echo function_exists( 'WC' ) ? wp_kses_post( WC()->cart->get_cart_subtotal() ) : '—'; ?></span>
+              <span class="cc-subtotal-amount"><?php echo function_exists( 'WC' ) ? wp_kses_post( WC()->cart->get_cart_subtotal() ) : '—'; ?></span>
             </div>
             <div class="cc-summary__total">
               <span>Ukupno za plaćanje</span>
-              <span><?php echo function_exists( 'WC' ) ? wp_kses_post( WC()->cart->get_total() ) : '—'; ?></span>
+              <span class="cc-total-amount"><?php echo function_exists( 'WC' ) ? wp_kses_post( WC()->cart->get_total() ) : '—'; ?></span>
             </div>
 
             <form method="post" class="cc-coupon-form">
@@ -383,12 +438,19 @@ get_header();
           </div>
         </div>
 
-        <div class="cc-summary__card cc-participants cc-hidden" id="cc-participants">
-          <h3>Dodaj polaznika</h3>
+        <!-- Participants section - uses form attribute to link inputs to main form -->
+        <div class="cc-summary__card cc-participants cc-hidden" id="cc-participants-wrapper">
+          <h3>Polaznici</h3>
           <div id="cc-participants-list"></div>
-          <div class="cc-actions">
-            <button type="button" class="cc-btn cc-btn-primary" id="cc-add-participant">Dodaj polaznika</button>
+          <div class="cc-actions cc-actions-participants">
+            <button type="button" class="cc-btn cc-btn-add" id="cc-add-participant" title="Dodaj polaznika">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 1V15M1 8H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <span>Dodaj polaznika</span>
+            </button>
           </div>
+          <button type="button" class="cc-btn cc-btn-success cc-btn-save-participants-bottom" id="cc-save-participants" style="display: none;">Sačuvaj izmene</button>
         </div>
 
         <div class="cc-summary__card cc-payments" id="cc-payments">
@@ -433,7 +495,7 @@ get_header();
   </div>
 
   <?php
-  // Custom footer (only for this checkout template)
+  // Contact info section
   $terms_url   = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('terms') : '';
   $privacy_url = function_exists('get_privacy_policy_url') ? get_privacy_policy_url() : '';
   ?>
@@ -463,6 +525,22 @@ get_header();
       </ul>
     </div>
   </div>
+
+  <!-- Custom Footer -->
+  <footer class="softuni-custom-footer">
+    <div class="footer-content">
+      <div class="footer-left">
+        Copyright © 2025 SOFTUNI
+      </div>
+      <div class="footer-right">
+        <a href="<?php echo esc_url( home_url('/politika-privatnosti/') ); ?>">Politika privatnosti</a>
+        <a href="<?php echo esc_url( home_url('/opsta-pravila/') ); ?>">Opšta pravila</a>
+      </div>
+    </div>
+  </footer>
+
 </main>
 
-<?php get_footer(); ?>
+<?php wp_footer(); ?>
+</body>
+</html>

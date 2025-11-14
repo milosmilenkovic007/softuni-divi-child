@@ -1,11 +1,29 @@
 (function($){
+  // Global references to participants
+  var $participantsList, $addParticipantBtn, participantNextIndex;
+  
   function toggleCompany(){
     var isCompany = $('#cc_type_company').is(':checked');
     $('#cc-company-block').toggleClass('cc-hidden', !isCompany);
-    var $participants = $('#cc-participants');
+    var $participants = $('#cc-participants-wrapper');
     $participants.toggleClass('cc-hidden', !isCompany);
-    // Enable/disable all participant inputs and buttons so they don't submit when hidden
-    $participants.find('input, button').prop('disabled', !isCompany);
+    
+    // DON'T disable inputs - they won't submit when disabled!
+    // Just hide them visually - they'll only submit if visible & filled
+    // $participants.find('input, button').prop('disabled', !isCompany);
+
+    // Reset participants when switching to individual
+    if(!isCompany){
+      if($participantsList && $participantsList.length){
+        $participantsList.empty();
+        participantNextIndex = 0;
+      }
+      if($addParticipantBtn && $addParticipantBtn.length){
+        $addParticipantBtn.find('span').text('Dodaj polaznika');
+      }
+      $('#cc-save-participants').hide();
+      $('.cc-participant-multiplier').remove();
+    }
 
     // Adjust available payment methods
     configureGatewaysForCustomerType(isCompany);
@@ -66,13 +84,14 @@
       for(var i=0;i<cardIds.length;i++){
         if(selectGatewayById(cardIds[i])){ picked = true; break; }
       }
-      if(!picked){
-        var $first = $('.cc-pay-option:not(.cc-hidden)').first().find('input');
-        if($first.length){ $first.prop('checked', true).trigger('change'); }
-      }
     }
   }
   function initCustomCheckout(){
+    // Initialize participants references FIRST (before toggleCompany is called)
+    $participantsList = $('#cc-participants-list');
+    $addParticipantBtn = $('#cc-add-participant');
+    participantNextIndex = $participantsList.find('.cc-participant').length;
+    
     // Initialize customer type toggle
     $(document).on('change', 'input[name="customer_type"]', toggleCompany);
     toggleCompany();
@@ -95,10 +114,9 @@
     $apartment.on('input change', updateAddr2);
     updateAddr2();
 
-    // Participants dynamic add/remove
-  var $list = $('#cc-participants-list');
-  var $addBtn = $('#cc-add-participant');
-  var nextIndex = $list.find('.cc-participant').length;
+    // Participants - use global references already initialized
+    var $list = $participantsList;
+    var $addBtn = $addParticipantBtn;
 
     function participantTemplate(i){
       return [
@@ -106,19 +124,19 @@
           '<div class="cc-row cc-row-wide">',
             '<div class="cc-field cc-row-wide">',
               '<label for="participant_full_name_'+i+'">Ime i prezime polaznika</label>',
-              '<input type="text" id="participant_full_name_'+i+'" name="participants['+i+'][full_name]" />',
+              '<input type="text" id="participant_full_name_'+i+'" name="participants['+i+'][full_name]" form="cc-form" />',
             '</div>',
           '</div>',
           '<div class="cc-row cc-row-wide">',
             '<div class="cc-field cc-row-wide">',
               '<label for="participant_email_'+i+'">E-mail</label>',
-              '<input type="email" id="participant_email_'+i+'" name="participants['+i+'][email]" />',
+              '<input type="email" id="participant_email_'+i+'" name="participants['+i+'][email]" form="cc-form" />',
             '</div>',
           '</div>',
           '<div class="cc-row cc-row-wide">',
             '<div class="cc-field cc-row-wide">',
               '<label for="participant_phone_'+i+'">Telefon</label>',
-              '<input type="text" id="participant_phone_'+i+'" name="participants['+i+'][phone]" />',
+              '<input type="text" id="participant_phone_'+i+'" name="participants['+i+'][phone]" form="cc-form" />',
             '</div>',
           '</div>',
           '<div class="cc-actions cc-actions-inline">',
@@ -129,17 +147,126 @@
     }
 
     $addBtn.on('click', function(){
-      var html = participantTemplate(nextIndex++);
+      var html = participantTemplate(participantNextIndex++);
       $list.append(html);
-      // Change button label after the first participant is added
-      if(nextIndex > 1){ $addBtn.text('Dodaj još jednog polaznika'); }
+      // Change button to icon-only after first participant
+      if(participantNextIndex === 1){ 
+        $addBtn.find('span').text('Dodaj još');
+      }
       // Ensure the list is visible
-      $('#cc-participants').removeClass('collapsed');
+      $('#cc-participants-wrapper').removeClass('collapsed');
+      // Show save button
+      $('#cc-save-participants').show();
     });
 
     $list.on('click', '.cc-remove-participant', function(){
       var $item = $(this).closest('.cc-participant');
       $item.remove();
+      
+      // Update add button text
+      var count = $list.find('.cc-participant').length;
+      if(count === 0){
+        $addBtn.find('span').text('Dodaj polaznika');
+        $('#cc-save-participants').hide();
+        // Immediately update pricing when all participants removed
+        updateParticipantPricing();
+      } else {
+        // Show save button when there are still participants
+        $('#cc-save-participants').show();
+      }
+    });
+
+    // Save participants button handler
+    $('#cc-save-participants').on('click', function(){
+      var $btn = $(this);
+      $btn.prop('disabled', true).text('Ažuriranje...');
+      
+      updateParticipantPricing(function(){
+        $btn.prop('disabled', false).text('Sačuvaj izmene').hide();
+      });
+    });
+
+    // Calculate and update total based on number of participants
+    function updateParticipantPricing(callback){
+      var isCompany = $('#cc_type_company').is(':checked');
+      
+      // Count total participants: 1 (buyer) + added participants
+      var addedParticipants = $list.find('.cc-participant').length;
+      var totalParticipants = isCompany ? (1 + addedParticipants) : 1;
+
+      // Update session via AJAX
+      $.ajax({
+        url: wc_checkout_params.ajax_url,
+        type: 'POST',
+        data: {
+          action: 'update_participant_count',
+          count: totalParticipants,
+          customer_type: isCompany ? 'company' : 'individual',
+          nonce: wc_checkout_params.update_order_review_nonce
+        },
+        success: function(response){
+          // Update prices from fragments
+          if(response.success && response.data.fragments){
+            $.each(response.data.fragments, function(selector, html){
+              $(selector).html(html);
+            });
+          }
+          
+          // Also trigger WooCommerce checkout update for other fragments
+          $(document.body).trigger('update_checkout');
+          
+          // Show participant multiplier info
+          if(isCompany && addedParticipants > 0){
+            var $participantInfo = $('.cc-participant-multiplier');
+            var infoHtml = '<div class="cc-participant-multiplier" style="font-size: 13px; color: #666; margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 4px;">Broj polaznika: ' + totalParticipants + '</div>';
+            
+            if(!$participantInfo.length){
+              $('.cc-summary__total').before(infoHtml);
+            } else {
+              $participantInfo.replaceWith(infoHtml);
+            }
+          } else {
+            $('.cc-participant-multiplier').remove();
+          }
+          
+          // Execute callback if provided
+          if(typeof callback === 'function'){
+            callback();
+          }
+        },
+        error: function(xhr, status, error){
+          if(typeof callback === 'function'){
+            callback();
+          }
+        }
+      });
+    }
+
+    // Store customer type in session on change
+    $(document).on('change', 'input[name="customer_type"]', function(){
+      var isCompany = $('#cc_type_company').is(':checked');
+      
+      // Update session and trigger price recalculation
+      $.ajax({
+        url: wc_checkout_params.ajax_url,
+        type: 'POST',
+        data: {
+          action: 'update_customer_type',
+          customer_type: isCompany ? 'company' : 'individual',
+          nonce: wc_checkout_params.update_order_review_nonce
+        },
+        success: function(response){
+          // Update prices from fragments if available
+          if(response.success && response.data && response.data.fragments){
+            $.each(response.data.fragments, function(selector, html){
+              $(selector).html(html);
+            });
+          }
+          
+          // Also trigger checkout update for other fragments
+          $(document.body).trigger('update_checkout');
+        }
+      });
     });
 
     // Payments: sync radio selection to hidden input in main form
@@ -155,6 +282,18 @@
 
     // Validation on submit
     $('#cc-form').on('submit', function(e){
+      // Debug: Log participants being submitted
+      var participantsData = [];
+      $('#cc-participants-list .cc-participant-item').each(function(i){
+        var $item = $(this);
+        participantsData.push({
+          name: $item.find('input[name="participants['+i+'][full_name]"]').val(),
+          email: $item.find('input[name="participants['+i+'][email]"]').val(),
+          phone: $item.find('input[name="participants['+i+'][phone]"]').val()
+        });
+      });
+      console.log('Participants to be submitted:', participantsData);
+      
       var isValid = validateCheckoutForm();
       if(!isValid){ e.preventDefault(); }
     });
@@ -193,10 +332,10 @@
     requireById('cc_first_name');
     requireById('cc_last_name');
     requireById('cc_street');
-    requireById('cc_entrance');
+    // cc_entrance (Broj) is NOT required
     requireById('cc_city');
     requireById('cc_postcode');
-    requireById('cc_phone');
+    // cc_phone (Telefon) is NOT required
     requireById('cc_email');
 
     // Basic format checks
@@ -209,7 +348,7 @@
     if(postcode && !/^\d{5}$/.test(postcode)){
       addFieldError($('#cc_postcode').closest('.cc-field'), 'Poštanski broj mora imati 5 cifara'); ok=false;
     }
-    // Phone: accept +381 or 0 prefix, allow digits and separators
+    // Phone: OPTIONAL - validate format only if provided
     var phoneRaw = ($('#cc_phone').val()||'').trim();
     if(phoneRaw && !/^(\+381|0)[0-9\s\-()]{6,}$/.test(phoneRaw)){
       addFieldError($('#cc_phone').closest('.cc-field'), 'Unesite ispravan telefon'); ok=false;
@@ -219,19 +358,12 @@
       requireById('cc_company_name');
       requireById('cc_company_mb');
       requireById('cc_company_pib');
-      // At least one participant if visible
+      // Participants are OPTIONAL - validate only if any are added
       var $plist = $('#cc-participants-list');
       if($plist.is(':visible')){
         var $items = $plist.find('.cc-participant');
-        if(!$items.length){
-          ok=false;
-          // Show a general message at the card level
-          var $card = $('#cc-participants');
-          if($card.find('.cc-error__msg').length===0){
-            $card.append('<div class="cc-error__msg">Dodajte bar jednog polaznika</div>');
-          }
-        } else {
-          // Validate each participant: full_name and email
+        // If participants exist, validate each one
+        if($items.length > 0){
           $items.each(function(){
             var $item = $(this);
             var idx = $item.data('index');

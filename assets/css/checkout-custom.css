@@ -55,11 +55,23 @@
 /* Company block */
 .cc-company.cc-hidden { display:none; }
 
+/* Participants section in sidebar */
+.cc-participants.cc-hidden { display:none; }
+.cc-participants h3 { font-size:18px; font-weight:700; margin-bottom:16px; color:#1f2937; }
+
 /* Actions */
-.cc-actions { margin-top:6px; }
-.cc-btn { display:inline-block; border:none; border-radius:10px; padding:12px 22px; font-size:14px; font-weight:700; cursor:pointer; transition:.2s ease; }
+.cc-actions { margin-top:12px; }
+.cc-actions-participants { margin-top:16px; margin-bottom:16px; }
+.cc-btn { display:inline-flex; align-items:center; gap:8px; border:none; border-radius:10px; padding:12px 22px; font-size:14px; font-weight:700; cursor:pointer; transition:.2s ease; }
+.cc-btn svg { flex-shrink:0; }
 .cc-btn-primary { background:#234465; color:#fff; }
 .cc-btn-primary:hover { filter:brightness(1.06); }
+.cc-btn-success { background:#00ba96; color:#fff; }
+.cc-btn-success:hover { filter:brightness(1.06); }
+.cc-btn-add { background:#234465; color:#fff; border:2px dashed #234465; background:transparent; color:#234465; }
+.cc-btn-add:hover { background:#234465; color:#fff; border-color:#234465; }
+.cc-btn:disabled { opacity:0.6; cursor:not-allowed; }
+.cc-btn-save-participants-bottom { width:100%; justify-content:center; margin-top:8px; }
 .cc-order-actions{ margin-top:12px; }
 
 /* Summary */

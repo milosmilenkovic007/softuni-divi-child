@@ -9,6 +9,11 @@ if (!defined('ABSPATH')) { exit; }
 
 // Save custom meta when an order is created via Woo checkout
 add_action('woocommerce_checkout_create_order', function( $order, $data ){
+	// Debug: Log ALL POST data to see what's being sent
+	error_log('=== FULL POST DATA ===');
+	error_log(print_r($_POST, true));
+	error_log('=== END POST DATA ===');
+	
 	$customer_type = isset($_POST['customer_type']) ? sanitize_text_field( wp_unslash($_POST['customer_type']) ) : '';
 	$pib = isset($_POST['billing_pib']) ? sanitize_text_field( wp_unslash($_POST['billing_pib']) ) : '';
 	$mb  = isset($_POST['billing_mb'])  ? sanitize_text_field( wp_unslash($_POST['billing_mb']) )  : '';
@@ -19,6 +24,33 @@ add_action('woocommerce_checkout_create_order', function( $order, $data ){
 	if ($mb)            { $order->update_meta_data('billing_mb', $mb); }
 	// Billing company is already part of billing data, but also store in meta for convenience
 	if ($company)       { $order->update_meta_data('billing_company', $company); }
+	
+	// Save participants if provided
+	error_log('Checking participants in POST: ' . print_r($_POST['participants'] ?? 'NOT SET', true));
+	
+	if ( isset($_POST['participants']) && is_array($_POST['participants']) ) {
+		$participants = array();
+		foreach ( $_POST['participants'] as $p ) {
+			// Skip empty participants
+			if ( empty($p['full_name']) && empty($p['email']) && empty($p['phone']) ) {
+				continue;
+			}
+			$participants[] = array(
+				'full_name' => isset($p['full_name']) ? sanitize_text_field( wp_unslash($p['full_name']) ) : '',
+				'email'     => isset($p['email']) ? sanitize_email( wp_unslash($p['email']) ) : '',
+				'phone'     => isset($p['phone']) ? sanitize_text_field( wp_unslash($p['phone']) ) : '',
+			);
+		}
+		
+		if ( !empty($participants) ) {
+			$order->update_meta_data( 'participants', $participants );
+			error_log('Saved participants: ' . print_r($participants, true));
+		} else {
+			error_log('No valid participants to save');
+		}
+	} else {
+		error_log('Participants not in POST or not array');
+	}
 }, 10, 2);
 
 // Show custom meta in admin order page
@@ -27,12 +59,17 @@ add_action('woocommerce_admin_order_data_after_billing_address', function( $orde
 	$pib = $order->get_meta('billing_pib');
 	$mb  = $order->get_meta('billing_mb');
 	$company = $order->get_billing_company();
-	$participants_json = $order->get_meta('participants');
+	$participants_data = $order->get_meta('participants');
 	$participants = [];
-	if ($participants_json) {
-		$decoded = json_decode($participants_json, true);
+	
+	// Handle both array and JSON string format
+	if ( is_array($participants_data) ) {
+		$participants = $participants_data;
+	} elseif ( is_string($participants_data) ) {
+		$decoded = json_decode($participants_data, true);
 		if (is_array($decoded)) { $participants = $decoded; }
 	}
+	
 	echo '<div class="order-custom-meta">';
 	if ($customer_type) { echo '<p><strong>Tip kupca:</strong> ' . esc_html($customer_type) . '</p>'; }
 	if ($company)       { echo '<p><strong>Pravno lice:</strong> ' . esc_html($company) . '</p>'; }

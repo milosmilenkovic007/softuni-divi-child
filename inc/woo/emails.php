@@ -18,10 +18,15 @@ add_action('woocommerce_email_order_meta', function( $order, $sent_to_admin, $pl
 	$mb            = trim( (string) $order->get_meta('billing_mb') );
 	$pib           = trim( (string) $order->get_meta('billing_pib') );
 	$participants  = [];
-	$participants_json = $order->get_meta('participants');
-	if ( $participants_json ) {
-		$decoded = json_decode( $participants_json, true );
-		if ( is_array( $decoded ) ) { $participants = $decoded; }
+	$participants_data = $order->get_meta('participants');
+	if ( $participants_data ) {
+		// Handle both array (new format) and JSON string (old format)
+		if ( is_array( $participants_data ) ) {
+			$participants = $participants_data;
+		} elseif ( is_string( $participants_data ) ) {
+			$decoded = json_decode( $participants_data, true );
+			if ( is_array( $decoded ) ) { $participants = $decoded; }
+		}
 	}
 
 	// Build output depending on plain or HTML email

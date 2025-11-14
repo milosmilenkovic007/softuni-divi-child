@@ -67,4 +67,6 @@ if ( class_exists('WooCommerce') ) {
 	require_once DIVICHILD_PATH . '/inc/woocommerce/payment-slip-generator.php';
 	// Customize thank you page (hide payment icons, clean design)
 	require_once DIVICHILD_PATH . '/inc/woocommerce/thankyou-customization.php';
+	// Participant-based pricing for companies
+	require_once DIVICHILD_PATH . '/inc/woocommerce/participant-pricing.php';
 }
