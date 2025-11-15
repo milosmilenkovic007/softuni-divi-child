@@ -1,7 +1,18 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/softuni1/staging.softuni.rs/wp-content/themes/divi-child/
-    - /bin/rm -rf $DEPLOYPATH
-    - /bin/mkdir -p $DEPLOYPATH
-    - /bin/cp -R ./* $DEPLOYPATH
+    # 1. Odredi u kom repo folderu smo (staging ili prod)
+    - export REPOPATH=$(pwd)
+
+    # 2. Ako je prod repo, deploy na produkciju; inače na staging
+    - |
+      if echo "$REPOPATH" | grep -q "softuni-divi-child-prod"; then
+        # PRODUKCIJA
+        export DEPLOYPATH=/home/softuni1/public_html/wp-content/themes/divi-child/
+      else
+        # STAGING
+        export DEPLOYPATH=/home/softuni1/staging.softuni.rs/wp-content/themes/divi-child/
+      fi
+
+    # 3. Kopiranje fajlova (bez .git, briše viškove)
+    - /bin/rsync -av --delete --exclude=".git" ./ "$DEPLOYPATH"
