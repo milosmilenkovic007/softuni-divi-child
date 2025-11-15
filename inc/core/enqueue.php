@@ -38,6 +38,22 @@ add_action('wp_enqueue_scripts', function () {
 		$cjs_rel = '/assets/js/checkout-custom.js';
 		if ( file_exists($theme_dir . $cjs_rel) ) {
 			wp_enqueue_script('divi-child-checkout-custom', $theme_uri . $cjs_rel, ['jquery'], $file_ver($cjs_rel), true);
+			
+			// Localize script with AJAX URL and nonce for cart operations
+			$wc_ajax_url = class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('%%endpoint%%') : '';
+			wp_localize_script('divi-child-checkout-custom', 'wc_checkout_params', array(
+				'ajax_url' => admin_url('admin-ajax.php'),
+				'wc_ajax_url' => $wc_ajax_url,
+				'update_order_review_nonce' => wp_create_nonce('update-order-review'),
+				'apply_coupon_nonce' => wp_create_nonce('apply-coupon'),
+				'remove_coupon_nonce' => wp_create_nonce('remove-coupon'),
+				'option_guest_checkout' => get_option('woocommerce_enable_guest_checkout'),
+				'checkout_url' => wc_get_checkout_url(),
+				'shop_url' => get_permalink(wc_get_page_id('shop')),
+				'is_checkout' => 1,
+				'debug_mode' => defined('WP_DEBUG') && WP_DEBUG,
+				'i18n_checkout_error' => esc_attr__('Error processing checkout. Please try again.', 'woocommerce'),
+			));
 		}
 	}
 

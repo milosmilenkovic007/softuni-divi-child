@@ -393,31 +393,51 @@ get_header();
         <div class="cc-summary__card">
           <h3>Pregled narudžbine</h3>
           <div class="cc-summary__content" id="cc-order-review">
-            <div class="cc-summary__row">
-              <span>
-                <?php 
-                // Display product name(s) instead of generic "Narudžbina"
-                if ( function_exists( 'WC' ) && WC()->cart ) {
-                  $cart_items = WC()->cart->get_cart();
-                  $product_names = array();
-                  foreach ( $cart_items as $cart_item ) {
-                    $product = $cart_item['data'];
-                    if ( $product ) {
-                      $product_names[] = $product->get_name();
-                    }
+            <?php 
+            if ( function_exists( 'WC' ) && WC()->cart ) {
+              $cart_items = WC()->cart->get_cart();
+              if ( !empty($cart_items) ) {
+                foreach ( $cart_items as $cart_item_key => $cart_item ) {
+                  $product = $cart_item['data'];
+                  if ( $product ) {
+                    $product_name = $product->get_name();
+                    $quantity = $cart_item['quantity'];
+                    $line_total = WC()->cart->get_product_subtotal( $product, $quantity );
+                    ?>
+                    <div class="cc-summary__product" data-cart-key="<?php echo esc_attr( $cart_item_key ); ?>">
+                      <div class="cc-product-info">
+                        <button type="button" class="cc-remove-product" data-cart-key="<?php echo esc_attr( $cart_item_key ); ?>" title="Ukloni">
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M1 1L13 13M1 13L13 1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                          </svg>
+                        </button>
+                        <span class="cc-product-name">
+                          <?php echo esc_html( $product_name ); ?>
+                          <?php if ( $quantity > 1 ) : ?>
+                            <span class="cc-product-qty">× <?php echo esc_html( $quantity ); ?></span>
+                          <?php endif; ?>
+                        </span>
+                      </div>
+                      <span class="cc-product-price"><?php echo wp_kses_post( $line_total ); ?></span>
+                    </div>
+                    <?php
                   }
-                  if ( !empty($product_names) ) {
-                    echo esc_html( implode(', ', $product_names) );
-                  } else {
-                    echo 'Narudžbina';
-                  }
-                } else {
-                  echo 'Narudžbina';
                 }
+              } else {
+                // Cart is empty - show message with button
                 ?>
-              </span>
-              <span class="cc-subtotal-amount"><?php echo function_exists( 'WC' ) ? wp_kses_post( WC()->cart->get_cart_subtotal() ) : '—'; ?></span>
-            </div>
+                <p class="cc-empty-cart">
+                  Vaša korpa je prazna.<br>
+                  <a href="<?php echo esc_url( get_permalink( wc_get_page_id( 'shop' ) ) ); ?>" class="cc-btn cc-btn-primary" style="margin-top:12px; display:inline-flex;">Pogledajte kurseve</a>
+                </p>
+                <?php
+              }
+            }
+            ?>
+            <?php 
+            // Only show totals and coupon if cart is not empty
+            if ( function_exists( 'WC' ) && WC()->cart && !WC()->cart->is_empty() ) : 
+            ?>
             <div class="cc-summary__total">
               <span>Ukupno za plaćanje</span>
               <span class="cc-total-amount"><?php echo function_exists( 'WC' ) ? wp_kses_post( WC()->cart->get_total() ) : '—'; ?></span>
@@ -431,9 +451,14 @@ get_header();
               </div>
             </form>
             <?php if ( function_exists( 'wc_print_notices' ) ) { wc_print_notices(); } ?>
+            <?php endif; ?>
           </div>
         </div>
 
+        <?php 
+        // Only show participants and payment sections if cart is not empty
+        if ( function_exists( 'WC' ) && WC()->cart && !WC()->cart->is_empty() ) : 
+        ?>
         <!-- Participants section - uses form attribute to link inputs to main form -->
         <div class="cc-summary__card cc-participants cc-hidden" id="cc-participants-wrapper">
           <h3>Polaznici</h3>
@@ -483,6 +508,7 @@ get_header();
             <button type="submit" class="cc-btn cc-btn-primary" id="cc-place-order" form="cc-form">Naruči</button>
           </div>
         </div>
+        <?php endif; // End cart not empty check ?>
       </aside>
     </div>
 

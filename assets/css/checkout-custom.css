@@ -80,6 +80,18 @@
 .cc-summary__row, .cc-summary__total { display:flex; justify-content:space-between; padding:6px 0; font-size:14px; }
 .cc-summary__total { border-top:1px solid #eef0f3; margin-top:8px; padding-top:12px; font-weight:700; }
 
+/* Products in summary */
+.cc-summary__product { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #f0f2f5; }
+.cc-summary__product:last-of-type { border-bottom:none; margin-bottom:8px; }
+.cc-product-info { display:flex; align-items:center; gap:8px; flex:1; }
+.cc-remove-product { background:transparent; border:none; padding:4px; cursor:pointer; color:#94a3b8; transition:color .2s ease; display:flex; align-items:center; justify-content:center; border-radius:4px; }
+.cc-remove-product:hover { color:#ef4444; background:#fee; }
+.cc-remove-product svg { width:14px; height:14px; }
+.cc-product-name { font-size:14px; color:#1f2937; font-weight:500; }
+.cc-product-qty { color:#6b7280; font-weight:400; margin-left:4px; }
+.cc-product-price { font-size:14px; font-weight:600; color:#1f2937; white-space:nowrap; }
+.cc-empty-cart { text-align:center; padding:20px; color:#6b7280; font-size:14px; }
+
 /* Participants card */
 .cc-participants{ margin-top:16px; }
 .cc-participant{ border-top:1px dashed #e6e9f0; padding-top:12px; margin-top:12px; }

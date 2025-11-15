@@ -53,6 +53,8 @@ if ( class_exists('WooCommerce') ) {
 	require_once DIVICHILD_PATH . '/inc/woo/emails.php';
 	// Redirect cart to checkout
 	require_once DIVICHILD_PATH . '/inc/woo/redirect-cart-to-checkout.php';
+	// Cart AJAX handlers (remove items)
+	require_once DIVICHILD_PATH . '/inc/woocommerce/cart-ajax.php';
 	// PDF invoice/proforma generator (thank-you page button)
 	require_once DIVICHILD_PATH . '/inc/woocommerce/invoice-pdf.php';
 	// Admin-side PDF generator button/meta box on order edit

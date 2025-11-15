@@ -96,6 +96,65 @@
     $(document).on('change', 'input[name="customer_type"]', toggleCompany);
     toggleCompany();
 
+    // Remove product from cart
+    $(document).on('click', '.cc-remove-product', function(e){
+      e.preventDefault();
+      var $btn = $(this);
+      var cartKey = $btn.data('cart-key');
+      
+      if(!cartKey || $btn.hasClass('removing')) return;
+      
+      $btn.addClass('removing').prop('disabled', true);
+      var $product = $btn.closest('.cc-summary__product');
+      $product.css('opacity', '0.5');
+
+      $.ajax({
+        url: wc_checkout_params.ajax_url,
+        type: 'POST',
+        data: {
+          action: 'remove_cart_item',
+          cart_item_key: cartKey,
+          security: wc_checkout_params.remove_item_nonce || ''
+        },
+        success: function(response){
+          if(response.success){
+            // Remove product from DOM
+            $product.remove();
+            
+            // Check if there are any products left
+            var $remainingProducts = $('.cc-summary__product');
+            if($remainingProducts.length === 0){
+              // Show empty cart message
+              $('#cc-order-review').html('<p class="cc-empty-cart">Vaša korpa je prazna.<br><a href="' + (wc_checkout_params.shop_url || '/') + '" class="cc-btn cc-btn-primary" style="margin-top:12px; display:inline-flex;">Pogledajte kurseve</a></p>');
+              // Hide coupon form, participants and payment sections
+              $('.cc-coupon-form').hide();
+              $('#cc-participants-wrapper').hide();
+              $('#cc-payments').hide();
+              // Update totals to 0
+              $('.cc-subtotal-amount, .cc-total-amount').text('0,00 RSD');
+            } else {
+              // Update totals from response
+              if(response.data && response.data.cart_total){
+                $('.cc-total-amount').html(response.data.cart_total);
+              }
+              if(response.data && response.data.cart_subtotal){
+                $('.cc-subtotal-amount').html(response.data.cart_subtotal);
+              }
+            }
+          } else {
+            alert(response.data.message || 'Greška pri uklanjanju proizvoda.');
+            $btn.removeClass('removing').prop('disabled', false);
+            $product.css('opacity', '1');
+          }
+        },
+        error: function(){
+          alert('Greška pri uklanjanju proizvoda. Pokušajte ponovo.');
+          $btn.removeClass('removing').prop('disabled', false);
+          $product.css('opacity', '1');
+        }
+      });
+    });
+
     // Removed old continue button behavior; order button lives under payments now
 
   // Compose billing_address_2 from Broj and Stan
